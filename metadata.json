@@ -1,0 +1,6 @@
+{
+  "name": "ProxiAfrik",
+  "description": "Les bons professionnels, près de vous. Plateforme africaine pour rechercher, découvrir et contacter des prestataires de services.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
