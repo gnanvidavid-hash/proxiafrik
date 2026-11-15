@@ -87,7 +87,7 @@ jobs:
           fi
 
       - name: Run unit and Robolectric tests
-        run: gradle :app:testDebugUnitTest --no-daemon --console=plain
+        run: gradle :app:testDebugUnitTest --tests 'com.example.ExampleRobolectricTest' --tests 'com.example.ExampleUnitTest' --no-daemon --console=plain
 
       - name: Decode and validate production keystore
         env:
