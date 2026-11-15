@@ -95,7 +95,7 @@ jobs:
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
         run: |
           KEYSTORE_FILE="${{ runner.temp }}/proxiafrik-release.jks"
-          echo "$KEYSTORE_BASE64" | tr -d '\n\r ' | base64 -d > "$KEYSTORE_FILE"
+          printf '%s' "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > "$KEYSTORE_FILE"
           chmod 600 "$KEYSTORE_FILE"
           if ! keytool -list -keystore "$KEYSTORE_FILE" -alias upload -storepass "$STORE_PASSWORD" > /dev/null 2>&1; then
             echo "::error::Failed to verify keystore or locate alias 'upload'. Ensure your keystore has alias 'upload' and STORE_PASSWORD is correct."
