@@ -1,0 +1,166 @@
+name: Production Release APK
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: "Version tag to release (e.g. v1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-apk:
+    name: Build, Sign & Publish Release APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine release version tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.version_tag }}"
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+          if [ -z "$TAG" ]; then
+            echo "::error::Release version tag cannot be empty."
+            exit 1
+          fi
+          echo "RELEASE_TAG=${TAG}" >> "$GITHUB_ENV"
+          echo "APK_FILENAME=PROXIAFRIK-${TAG}.apk" >> "$GITHUB_ENV"
+          echo "Preparing release for tag: ${TAG}"
+
+      - name: Validate required signing secrets
+        env:
+          CHECK_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 }}
+          CHECK_STORE_PW: ${{ secrets.STORE_PASSWORD }}
+          CHECK_KEY_PW: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -z "$CHECK_KEYSTORE" ] || [ -z "$CHECK_STORE_PW" ] || [ -z "$CHECK_KEY_PW" ]; then
+            echo "::error::Missing required GitHub Secrets: KEYSTORE_BASE64, STORE_PASSWORD, and KEY_PASSWORD must all be configured in Repository Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+          echo "All required signing secrets are configured."
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.3.1"
+
+      - name: Prepare debug keystore for unit tests
+        run: |
+          if [ ! -f debug.keystore ]; then
+            if [ -f debug.keystore.base64 ]; then
+              base64 -d debug.keystore.base64 > debug.keystore
+            else
+              keytool -genkeypair -v \
+                -keystore debug.keystore \
+                -storepass android \
+                -alias androiddebugkey \
+                -keypass android \
+                -keyalg RSA \
+                -keysize 2048 \
+                -validity 10000 \
+                -dname "CN=Android Debug,O=Android,C=US"
+            fi
+          fi
+
+      - name: Run unit and Robolectric tests
+        run: gradle :app:testDebugUnitTest --no-daemon --console=plain
+
+      - name: Decode and validate production keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+        run: |
+          KEYSTORE_FILE="${{ runner.temp }}/proxiafrik-release.jks"
+          echo "$KEYSTORE_BASE64" | tr -d '\n\r ' | base64 -d > "$KEYSTORE_FILE"
+          chmod 600 "$KEYSTORE_FILE"
+          if ! keytool -list -keystore "$KEYSTORE_FILE" -alias upload -storepass "$STORE_PASSWORD" > /dev/null 2>&1; then
+            echo "::error::Failed to verify keystore or locate alias 'upload'. Ensure your keystore has alias 'upload' and STORE_PASSWORD is correct."
+            exit 1
+          fi
+          echo "Production keystore decoded and alias 'upload' verified."
+
+      - name: Build signed Release APK
+        env:
+          KEYSTORE_PATH: ${{ runner.temp }}/proxiafrik-release.jks
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: gradle :app:assembleRelease --no-daemon --console=plain
+
+      - name: Package and validate signed Release APK
+        run: |
+          APK_SOURCE="app/build/outputs/apk/release/app-release.apk"
+          if [ ! -f "$APK_SOURCE" ]; then
+            echo "::error::Release APK not found at $APK_SOURCE"
+            exit 1
+          fi
+
+          mkdir -p dist
+          OUTPUT_APK="dist/${APK_FILENAME}"
+          cp "$APK_SOURCE" "$OUTPUT_APK"
+
+          SDK_DIR="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          APKSIGNER=$(find "$SDK_DIR/build-tools" -name "apksigner" 2>/dev/null | sort -V | tail -n 1)
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::apksigner not found under $SDK_DIR/build-tools"
+            exit 1
+          fi
+
+          echo "Validating APK signature with: $APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs "$OUTPUT_APK"
+
+          # Ensure production APK is not accidentally signed with Android Debug key
+          if "$APKSIGNER" verify --print-certs "$OUTPUT_APK" | grep -q "CN=Android Debug"; then
+            echo "::error::Release APK appears to be signed with a debug certificate! Aborting release."
+            exit 1
+          fi
+
+          sha256sum "$OUTPUT_APK" > "${OUTPUT_APK}.sha256"
+          ls -lh "$OUTPUT_APK" "${OUTPUT_APK}.sha256"
+          cat "${OUTPUT_APK}.sha256"
+
+      - name: Clean up temporary keystore
+        if: always()
+        run: rm -f "${{ runner.temp }}/proxiafrik-release.jks"
+
+      - name: Create GitHub Release and attach APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ProxiAfrik ${{ env.RELEASE_TAG }}
+          generate_release_notes: true
+          body: |
+            ## ProxiAfrik ${{ env.RELEASE_TAG }}
+
+            Version de production signée et vérifiée pour Android.
+
+            ### Installation sur Android
+            1. Téléchargez **`${{ env.APK_FILENAME }}`** ci-dessous.
+            2. Ouvrez le fichier APK sur votre téléphone Android (autorisez l'installation depuis cette source si demandé).
+            3. Vérifiez l'empreinte SHA-256 via `${{ env.APK_FILENAME }}.sha256` si nécessaire.
+          files: |
+            dist/${{ env.APK_FILENAME }}
+            dist/${{ env.APK_FILENAME }}.sha256

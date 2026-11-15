@@ -395,8 +395,7 @@ fun ProfileDetailScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(50.dp)
-                                .testTag("detail_whatsapp_button")
-                                .testTag("whatsapp_contact_button"),
+                                .testTag("detail_whatsapp_button"),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366)),
                             shape = RoundedCornerShape(10.dp)
                         ) {
@@ -413,8 +412,7 @@ fun ProfileDetailScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(50.dp)
-                                .testTag("detail_call_button")
-                                .testTag("phone_call_button"),
+                                .testTag("detail_call_button"),
                             colors = ButtonDefaults.buttonColors(containerColor = ProxiGreen),
                             shape = RoundedCornerShape(10.dp)
                         ) {
@@ -1271,8 +1269,12 @@ fun ProfileDetailScreen(
                             viewModel.submitReview(
                                 profileId = currentPro.id,
                                 rating = reviewRating,
-                                comment = reviewComment
+                                comment = reviewComment.trim(),
+                                customAuthorName = reviewerName.trim()
                             )
+                            reviewerName = ""
+                            reviewComment = ""
+                            reviewRating = 5
                             showReviewDialog = false
                             Toast.makeText(context, "Votre avis a été publié avec succès. Merci !", Toast.LENGTH_SHORT).show()
                         } else {
