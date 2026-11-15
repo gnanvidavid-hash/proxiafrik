@@ -63,6 +63,7 @@ Add the following **3 secrets**:
 | `KEYSTORE_BASE64` | The single-line Base64 string of `proxiafrik-release.jks` |
 | `STORE_PASSWORD` | Your keystore password |
 | `KEY_PASSWORD` | Your `upload` key password |
+| `GOOGLE_SERVICES_JSON_BASE64` *(if not committed)* | Single-line Base64 of `app/google-services.json` if `app/google-services.json` is absent from GitHub |
 
 *(Optional)* If you use Gemini/third-party API keys via `.env` / Secrets Gradle Plugin, add them as Secrets only if required by your production configuration.
 
