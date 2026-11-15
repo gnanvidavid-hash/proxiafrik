@@ -36,3 +36,6 @@ debug.keystore
 *.p12
 *.pem
 !debug.keystore.base64
+
+# Firebase CLI debug logs
+*-debug.log

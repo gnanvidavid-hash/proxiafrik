@@ -1,6 +1,9 @@
 package com.example.ui.screens
 
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -20,14 +23,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -36,34 +42,38 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.local.SeedData
-import com.example.data.local.ServiceEntity
+import com.example.data.model.GeoCatalog
+import com.example.data.model.ServiceItem
+import com.example.ui.components.ProxiPhoto
+import com.example.ui.components.encodeImageUriToDataUrl
 import com.example.ui.theme.ProxiBackground
 import com.example.ui.theme.ProxiBorder
 import com.example.ui.theme.ProxiDarkBlue
 import com.example.ui.theme.ProxiGreen
+import com.example.ui.theme.ProxiGreenText
+import com.example.ui.theme.ProxiRed
 import com.example.ui.theme.ProxiTextPrimary
 import com.example.ui.theme.ProxiTextSecondary
 import com.example.ui.viewmodel.ProxiAfrikViewModel
+import kotlinx.coroutines.launch
 import java.util.UUID
 
 @Composable
@@ -71,9 +81,11 @@ fun ProWizardScreen(
     viewModel: ProxiAfrikViewModel
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
     val draft by viewModel.wizardDraft.collectAsState()
     val categories by viewModel.activeCategories.collectAsState()
-    val currentUser by viewModel.currentUser.collectAsState()
+    val isSubmitting by viewModel.isSubmittingWizard.collectAsState()
 
     var newServiceTitle by remember { mutableStateOf("") }
     var newServiceDesc by remember { mutableStateOf("") }
@@ -81,11 +93,61 @@ fun ProWizardScreen(
     var newServiceIsDevis by remember { mutableStateOf(false) }
 
     var newPhotoCaption by remember { mutableStateOf("") }
+    var isProcessingPhoto by remember { mutableStateOf(false) }
 
     var categoryDropdownExpanded by remember { mutableStateOf(false) }
     var countryDropdownExpanded by remember { mutableStateOf(false) }
     var departmentDropdownExpanded by remember { mutableStateOf(false) }
     var cityDropdownExpanded by remember { mutableStateOf(false) }
+
+    // Android Zero-Permission Photo Picker for Profile Photo
+    val profilePhotoPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            isProcessingPhoto = true
+            coroutineScope.launch {
+                val encoded = encodeImageUriToDataUrl(context, uri, maxDim = 512)
+                isProcessingPhoto = false
+                if (encoded != null) {
+                    viewModel.updateWizardField { d -> d.copy(profileImage = encoded) }
+                } else {
+                    Toast.makeText(context, "Impossible de charger cette image.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    // Android Zero-Permission Photo Picker for Portfolio Works
+    val portfolioPhotoPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            isProcessingPhoto = true
+            coroutineScope.launch {
+                val encoded = encodeImageUriToDataUrl(context, uri, maxDim = 640)
+                isProcessingPhoto = false
+                if (encoded != null) {
+                    val caption = newPhotoCaption.trim().ifBlank { "Réalisation professionnelle" }
+                    viewModel.updateWizardField { d ->
+                        d.copy(portfolioPhotos = d.portfolioPhotos + Pair(encoded, caption))
+                    }
+                    newPhotoCaption = ""
+                } else {
+                    Toast.makeText(context, "Impossible de compresser la photo sélectionnée.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = ProxiTextPrimary,
+        unfocusedTextColor = ProxiTextPrimary,
+        focusedPlaceholderColor = ProxiTextSecondary,
+        unfocusedPlaceholderColor = ProxiTextSecondary,
+        focusedBorderColor = ProxiDarkBlue,
+        unfocusedBorderColor = ProxiBorder
+    )
 
     LazyColumn(
         modifier = Modifier
@@ -108,20 +170,20 @@ fun ProWizardScreen(
                 ) {
                     Text(
                         text = "Inscription de votre activité",
-                        fontSize = 18.sp,
+                        fontSize = 19.sp,
                         fontWeight = FontWeight.Bold,
                         color = ProxiDarkBlue
                     )
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = "Étape ${draft.currentStep} sur 6 : ${getStepTitle(draft.currentStep)}",
-                        fontSize = 13.sp,
-                        color = ProxiGreen,
+                        fontSize = 14.sp,
+                        color = ProxiGreenText,
                         fontWeight = FontWeight.SemiBold
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
-                    // Progress dots
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -132,7 +194,7 @@ fun ProWizardScreen(
                             val isCurrent = step == draft.currentStep
                             Box(
                                 modifier = Modifier
-                                    .size(32.dp)
+                                    .size(34.dp)
                                     .clip(CircleShape)
                                     .background(
                                         when {
@@ -144,12 +206,12 @@ fun ProWizardScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (isCompleted) {
-                                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                                 } else {
                                     Text(
                                         text = "$step",
                                         color = if (isCurrent) Color.White else ProxiTextSecondary,
-                                        fontSize = 13.sp,
+                                        fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
@@ -176,9 +238,69 @@ fun ProWizardScreen(
                 ) {
                     when (draft.currentStep) {
                         1 -> {
-                            // ÉTAPE 1 : ACTIVITÉ
-                            Text("1. Informations de l'activité", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ProxiDarkBlue)
+                            Text("1. Photo, métier et description", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ProxiDarkBlue)
                             Spacer(modifier = Modifier.height(12.dp))
+
+                            // Real Profile Photo Selection
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(ProxiBackground)
+                                    .padding(12.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .clip(CircleShape)
+                                        .background(ProxiDarkBlue),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    ProxiPhoto(
+                                        imageUrl = draft.profileImage,
+                                        contentDescription = "Photo du professionnel",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize(),
+                                        fallbackContent = {
+                                            Icon(
+                                                imageVector = Icons.Default.PhotoCamera,
+                                                contentDescription = null,
+                                                tint = Color.White,
+                                                modifier = Modifier.size(26.dp)
+                                            )
+                                        }
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Photo de profil / vitrine", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = ProxiTextPrimary)
+                                    Text(
+                                        text = if (draft.profileImage.isBlank()) "Ajoutez votre portrait ou logo d'atelier" else "Photo enregistrée",
+                                        fontSize = 12.sp,
+                                        color = ProxiTextSecondary
+                                    )
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    OutlinedButton(
+                                        onClick = {
+                                            profilePhotoPicker.launch(
+                                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                            )
+                                        },
+                                        enabled = !isProcessingPhoto,
+                                        modifier = Modifier.testTag("wizard_pick_profile_photo_btn")
+                                    ) {
+                                        Text(
+                                            text = if (draft.profileImage.isBlank()) "Choisir une photo" else "Changer la photo",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = ProxiDarkBlue
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(14.dp))
 
                             OutlinedTextField(
                                 value = draft.businessName,
@@ -186,19 +308,25 @@ fun ProWizardScreen(
                                 label = { Text("Nom commercial ou nom d'artisan *") },
                                 placeholder = { Text("Ex: Plomberie Moderne Cotonou") },
                                 modifier = Modifier.fillMaxWidth().testTag("wizard_input_business_name"),
-                                singleLine = true
+                                singleLine = true,
+                                colors = fieldColors
                             )
 
                             Spacer(modifier = Modifier.height(12.dp))
 
-                            // Category selector
                             Box {
                                 OutlinedTextField(
                                     value = categories.find { it.id == draft.primaryCategoryId }?.name ?: "Sélectionner une catégorie",
                                     onValueChange = {},
                                     readOnly = true,
                                     label = { Text("Catégorie principale *") },
-                                    modifier = Modifier.fillMaxWidth().clickable { categoryDropdownExpanded = true }
+                                    modifier = Modifier.fillMaxWidth().clickable { categoryDropdownExpanded = true },
+                                    colors = fieldColors
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .clickable { categoryDropdownExpanded = true }
                                 )
                                 DropdownMenu(
                                     expanded = categoryDropdownExpanded,
@@ -206,7 +334,7 @@ fun ProWizardScreen(
                                 ) {
                                     categories.forEach { cat ->
                                         DropdownMenuItem(
-                                            text = { Text(cat.name) },
+                                            text = { Text(cat.name, color = ProxiTextPrimary) },
                                             onClick = {
                                                 viewModel.updateWizardField { d -> d.copy(primaryCategoryId = cat.id) }
                                                 categoryDropdownExpanded = false
@@ -221,10 +349,11 @@ fun ProWizardScreen(
                             OutlinedTextField(
                                 value = draft.description,
                                 onValueChange = { viewModel.updateWizardField { d -> d.copy(description = it) } },
-                                label = { Text("Description de votre savoir-faire *") },
+                                label = { Text("Description de votre savoir-faire (min. 10 car.) *") },
                                 placeholder = { Text("Présentez votre expérience, vos spécialités et vos garanties...") },
                                 modifier = Modifier.fillMaxWidth().testTag("wizard_input_description"),
-                                minLines = 3
+                                minLines = 3,
+                                colors = fieldColors
                             )
 
                             Spacer(modifier = Modifier.height(12.dp))
@@ -232,34 +361,39 @@ fun ProWizardScreen(
                             OutlinedTextField(
                                 value = draft.ownerName,
                                 onValueChange = { viewModel.updateWizardField { d -> d.copy(ownerName = it) } },
-                                label = { Text("Nom du responsable / artisan (facultatif)") },
-                                placeholder = { Text("Ex: M. Jean-Paul") },
+                                label = { Text("Nom du responsable / artisan") },
+                                placeholder = { Text("Ex: M. Jean-Paul Mensah") },
                                 modifier = Modifier.fillMaxWidth(),
-                                singleLine = true
+                                singleLine = true,
+                                colors = fieldColors
                             )
                         }
 
                         2 -> {
-                            // ÉTAPE 2 : LOCALISATION
-                            Text("2. Localisation et zone d'intervention", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ProxiDarkBlue)
+                            Text("2. Localisation : Pays, Ville et Quartier", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ProxiDarkBlue)
                             Spacer(modifier = Modifier.height(12.dp))
 
-                            // Country
                             Box {
                                 OutlinedTextField(
                                     value = draft.countryName,
                                     onValueChange = {},
                                     readOnly = true,
                                     label = { Text("Pays *") },
-                                    modifier = Modifier.fillMaxWidth().clickable { countryDropdownExpanded = true }
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = fieldColors
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .clickable { countryDropdownExpanded = true }
                                 )
                                 DropdownMenu(
                                     expanded = countryDropdownExpanded,
                                     onDismissRequest = { countryDropdownExpanded = false }
                                 ) {
-                                    SeedData.supportedCountries.forEach { country ->
+                                    GeoCatalog.supportedCountries.forEach { country ->
                                         DropdownMenuItem(
-                                            text = { Text(country.name) },
+                                            text = { Text(country.name, color = ProxiTextPrimary) },
                                             onClick = {
                                                 val firstDept = country.departments.firstOrNull()
                                                 viewModel.updateWizardField { d ->
@@ -279,16 +413,21 @@ fun ProWizardScreen(
 
                             Spacer(modifier = Modifier.height(12.dp))
 
-                            val currentCountryInfo = SeedData.supportedCountries.find { it.code == draft.countryCode }
+                            val currentCountryInfo = GeoCatalog.supportedCountries.find { it.code == draft.countryCode }
 
-                            // Department
                             Box {
                                 OutlinedTextField(
                                     value = draft.department,
                                     onValueChange = {},
                                     readOnly = true,
                                     label = { Text("Département / Région *") },
-                                    modifier = Modifier.fillMaxWidth().clickable { departmentDropdownExpanded = true }
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = fieldColors
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .clickable { departmentDropdownExpanded = true }
                                 )
                                 DropdownMenu(
                                     expanded = departmentDropdownExpanded,
@@ -296,7 +435,7 @@ fun ProWizardScreen(
                                 ) {
                                     currentCountryInfo?.departments?.forEach { dept ->
                                         DropdownMenuItem(
-                                            text = { Text(dept.name) },
+                                            text = { Text(dept.name, color = ProxiTextPrimary) },
                                             onClick = {
                                                 viewModel.updateWizardField { d ->
                                                     d.copy(
@@ -313,15 +452,22 @@ fun ProWizardScreen(
 
                             Spacer(modifier = Modifier.height(12.dp))
 
-                            // City
-                            val availableCities = currentCountryInfo?.departments?.find { it.name.equals(draft.department, ignoreCase = true) }?.cities ?: currentCountryInfo?.allCities ?: emptyList()
+                            val availableCities = currentCountryInfo?.departments
+                                ?.find { it.name.equals(draft.department, ignoreCase = true) }
+                                ?.cities ?: currentCountryInfo?.allCities ?: emptyList()
                             Box {
                                 OutlinedTextField(
                                     value = draft.city,
                                     onValueChange = {},
                                     readOnly = true,
                                     label = { Text("Ville *") },
-                                    modifier = Modifier.fillMaxWidth().clickable { cityDropdownExpanded = true }
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = fieldColors
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .clickable { cityDropdownExpanded = true }
                                 )
                                 DropdownMenu(
                                     expanded = cityDropdownExpanded,
@@ -329,7 +475,7 @@ fun ProWizardScreen(
                                 ) {
                                     availableCities.forEach { city ->
                                         DropdownMenuItem(
-                                            text = { Text(city) },
+                                            text = { Text(city, color = ProxiTextPrimary) },
                                             onClick = {
                                                 viewModel.updateWizardField { d -> d.copy(city = city) }
                                                 cityDropdownExpanded = false
@@ -346,8 +492,9 @@ fun ProWizardScreen(
                                 onValueChange = { viewModel.updateWizardField { d -> d.copy(neighborhood = it) } },
                                 label = { Text("Quartier *") },
                                 placeholder = { Text("Ex: Cadjehoun, Godomey, Cocody...") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true
+                                modifier = Modifier.fillMaxWidth().testTag("wizard_input_neighborhood"),
+                                singleLine = true,
+                                colors = fieldColors
                             )
 
                             Spacer(modifier = Modifier.height(12.dp))
@@ -357,41 +504,40 @@ fun ProWizardScreen(
                                 onValueChange = { viewModel.updateWizardField { d -> d.copy(interventionZones = it) } },
                                 label = { Text("Zones d'intervention ou déplacements") },
                                 placeholder = { Text("Ex: Cotonou et périphérie, Abomey-Calavi") },
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = fieldColors
                             )
                         }
 
                         3 -> {
-                            // ÉTAPE 3 : SERVICES
                             Text("3. Vos prestations et tarifs", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ProxiDarkBlue)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text("Ajoutez un ou plusieurs services proposés à vos clients.", fontSize = 12.sp, color = ProxiTextSecondary)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text("Ajoutez les services proposés à vos clients.", fontSize = 13.sp, color = ProxiTextSecondary)
 
                             Spacer(modifier = Modifier.height(12.dp))
 
-                            // Existing added services
                             if (draft.services.isEmpty()) {
-                                Text("Aucun service ajouté. Utilisez le formulaire ci-dessous.", fontSize = 13.sp, color = ProxiTextSecondary)
+                                Text("Aucun service ajouté pour l'instant.", fontSize = 13.sp, color = ProxiTextSecondary)
                             } else {
                                 draft.services.forEachIndexed { index, srv ->
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(vertical = 4.dp),
+                                            .padding(vertical = 6.dp),
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Column(modifier = Modifier.weight(1f)) {
-                                            Text(srv.title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                            Text(srv.title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = ProxiTextPrimary)
                                             val priceStr = if (srv.pricingType == "SUR_DEVIS") "Sur devis" else "${srv.indicativePrice.toInt()} FCFA"
-                                            Text(priceStr, fontSize = 12.sp, color = ProxiGreen)
+                                            Text(priceStr, fontSize = 13.sp, color = ProxiGreenText, fontWeight = FontWeight.Medium)
                                         }
                                         IconButton(onClick = {
                                             viewModel.updateWizardField { d ->
                                                 d.copy(services = d.services.filterIndexed { i, _ -> i != index })
                                             }
                                         }) {
-                                            Icon(Icons.Default.Delete, contentDescription = "Supprimer", tint = Color.Red)
+                                            Icon(Icons.Default.Delete, contentDescription = "Supprimer", tint = ProxiRed)
                                         }
                                     }
                                 }
@@ -401,15 +547,16 @@ fun ProWizardScreen(
                             HorizontalDivider(color = ProxiBorder)
                             Spacer(modifier = Modifier.height(12.dp))
 
-                            Text("Ajouter une prestation :", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Text("Ajouter une prestation :", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = ProxiTextPrimary)
+                            Spacer(modifier = Modifier.height(8.dp))
 
                             OutlinedTextField(
                                 value = newServiceTitle,
                                 onValueChange = { newServiceTitle = it },
                                 label = { Text("Intitulé du service (ex: Débouchage express)") },
                                 modifier = Modifier.fillMaxWidth(),
-                                singleLine = true
+                                singleLine = true,
+                                colors = fieldColors
                             )
 
                             Spacer(modifier = Modifier.height(8.dp))
@@ -418,7 +565,8 @@ fun ProWizardScreen(
                                 value = newServiceDesc,
                                 onValueChange = { newServiceDesc = it },
                                 label = { Text("Courte description") },
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = fieldColors
                             )
 
                             Spacer(modifier = Modifier.height(8.dp))
@@ -428,7 +576,7 @@ fun ProWizardScreen(
                                     checked = newServiceIsDevis,
                                     onCheckedChange = { newServiceIsDevis = it }
                                 )
-                                Text("Prestation sur devis", fontSize = 13.sp)
+                                Text("Prestation sur devis", fontSize = 14.sp, color = ProxiTextPrimary)
                             }
 
                             if (!newServiceIsDevis) {
@@ -437,16 +585,17 @@ fun ProWizardScreen(
                                     onValueChange = { newServicePrice = it },
                                     label = { Text("Tarif indicatif en FCFA") },
                                     modifier = Modifier.fillMaxWidth(),
-                                    singleLine = true
+                                    singleLine = true,
+                                    colors = fieldColors
                                 )
                             }
 
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
 
                             Button(
                                 onClick = {
-                                    if (newServiceTitle.isNotBlank()) {
-                                        val srv = ServiceEntity(
+                                    if (newServiceTitle.trim().length >= 2) {
+                                        val srv = ServiceItem(
                                             id = "srv_" + UUID.randomUUID().toString().take(8),
                                             professionalId = draft.id,
                                             categoryId = draft.primaryCategoryId,
@@ -460,20 +609,24 @@ fun ProWizardScreen(
                                         newServiceDesc = ""
                                         newServicePrice = ""
                                         newServiceIsDevis = false
+                                    } else {
+                                        Toast.makeText(context, "Indiquez l'intitulé du service.", Toast.LENGTH_SHORT).show()
                                     }
                                 },
-                                colors = ButtonDefaults.buttonColors(containerColor = ProxiDarkBlue),
-                                modifier = Modifier.fillMaxWidth()
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = ProxiDarkBlue,
+                                    contentColor = Color.White
+                                ),
+                                modifier = Modifier.fillMaxWidth().height(48.dp)
                             ) {
-                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color.White)
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Ajouter ce service")
+                                Text("Ajouter ce service", color = Color.White, fontWeight = FontWeight.Bold)
                             }
                         }
 
                         4 -> {
-                            // ÉTAPE 4 : CONTACT & CONSENTEMENT
-                            Text("4. Coordonnées et horaires de travail", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ProxiDarkBlue)
+                            Text("4. WhatsApp, Téléphone et Consentement", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ProxiDarkBlue)
                             Spacer(modifier = Modifier.height(12.dp))
 
                             OutlinedTextField(
@@ -482,7 +635,8 @@ fun ProWizardScreen(
                                 label = { Text("Numéro de téléphone public *") },
                                 placeholder = { Text("Ex: +229 97 00 00 00") },
                                 modifier = Modifier.fillMaxWidth().testTag("wizard_input_phone"),
-                                singleLine = true
+                                singleLine = true,
+                                colors = fieldColors
                             )
 
                             Spacer(modifier = Modifier.height(12.dp))
@@ -493,7 +647,8 @@ fun ProWizardScreen(
                                 label = { Text("Numéro WhatsApp professionnel *") },
                                 placeholder = { Text("Ex: +229 97 00 00 00 (avec indicatif pays)") },
                                 modifier = Modifier.fillMaxWidth().testTag("wizard_input_whatsapp"),
-                                singleLine = true
+                                singleLine = true,
+                                colors = fieldColors
                             )
 
                             Spacer(modifier = Modifier.height(12.dp))
@@ -504,18 +659,18 @@ fun ProWizardScreen(
                                 label = { Text("Horaires déclarés") },
                                 placeholder = { Text("Ex: Lun - Sam : 08h00 - 18h30") },
                                 modifier = Modifier.fillMaxWidth(),
-                                singleLine = true
+                                singleLine = true,
+                                colors = fieldColors
                             )
 
                             Spacer(modifier = Modifier.height(16.dp))
 
-                            // Mandatory Consent Checkbox
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(Color(0xFFFEF3C7))
-                                    .padding(10.dp),
+                                    .padding(12.dp),
                                 verticalAlignment = Alignment.Top
                             ) {
                                 Checkbox(
@@ -525,38 +680,61 @@ fun ProWizardScreen(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Je consens expressément à la publication de mon numéro de téléphone et de mon numéro WhatsApp sur le profil public ProxiAfrik afin de recevoir des demandes de clients.",
-                                    fontSize = 12.sp,
-                                    color = Color(0xFF92400E),
-                                    lineHeight = 16.sp
+                                    text = "Je consens expressément à la publication de mon numéro de téléphone et de mon numéro WhatsApp sur mon profil public ProxiAfrik afin de recevoir des demandes de clients.",
+                                    fontSize = 13.sp,
+                                    color = Color(0xFF78350F),
+                                    lineHeight = 18.sp
                                 )
                             }
                         }
 
                         5 -> {
-                            // ÉTAPE 5 : PHOTOS DE RÉALISATIONS
                             Text("5. Photos de vos réalisations", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ProxiDarkBlue)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text("Les photos permettent aux clients de voir la qualité de vos travaux.", fontSize = 12.sp, color = ProxiTextSecondary)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text("Sélectionnez de vraies photos de vos travaux depuis votre téléphone.", fontSize = 13.sp, color = ProxiTextSecondary)
 
                             Spacer(modifier = Modifier.height(12.dp))
 
-                            if (draft.portfolioCaptions.isEmpty()) {
+                            if (draft.portfolioPhotos.isEmpty()) {
                                 Text("Aucune photo ajoutée pour l'instant.", fontSize = 13.sp, color = ProxiTextSecondary)
                             } else {
-                                draft.portfolioCaptions.forEachIndexed { index, (url, caption) ->
+                                draft.portfolioPhotos.forEachIndexed { index, (dataUrl, caption) ->
                                     Row(
-                                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 6.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(ProxiBackground)
+                                            .padding(8.dp),
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text("Photo : $caption", fontSize = 13.sp, modifier = Modifier.weight(1f))
+                                        Box(
+                                            modifier = Modifier
+                                                .size(48.dp)
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(ProxiDarkBlue.copy(alpha = 0.1f))
+                                        ) {
+                                            ProxiPhoto(
+                                                imageUrl = dataUrl,
+                                                contentDescription = caption,
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text(
+                                            text = caption,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = ProxiTextPrimary,
+                                            modifier = Modifier.weight(1f)
+                                        )
                                         IconButton(onClick = {
                                             viewModel.updateWizardField { d ->
-                                                d.copy(portfolioCaptions = d.portfolioCaptions.filterIndexed { i, _ -> i != index })
+                                                d.copy(portfolioPhotos = d.portfolioPhotos.filterIndexed { i, _ -> i != index })
                                             }
                                         }) {
-                                            Icon(Icons.Default.Delete, contentDescription = "Supprimer", tint = Color.Red)
+                                            Icon(Icons.Default.Delete, contentDescription = "Supprimer", tint = ProxiRed)
                                         }
                                     }
                                 }
@@ -567,38 +745,63 @@ fun ProWizardScreen(
                             OutlinedTextField(
                                 value = newPhotoCaption,
                                 onValueChange = { newPhotoCaption = it },
-                                label = { Text("Légende de la réalisation (ex: Installation salle de bain)") },
-                                modifier = Modifier.fillMaxWidth()
+                                label = { Text("Légende de la photo (optionnel)") },
+                                placeholder = { Text("Ex: Installation salle de bain") },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = fieldColors
                             )
 
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
 
                             Button(
                                 onClick = {
-                                    if (newPhotoCaption.isNotBlank()) {
-                                        viewModel.updateWizardField { d ->
-                                            d.copy(portfolioCaptions = d.portfolioCaptions + Pair("sample_work", newPhotoCaption.trim()))
-                                        }
-                                        newPhotoCaption = ""
-                                    }
+                                    portfolioPhotoPicker.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                    )
                                 },
-                                colors = ButtonDefaults.buttonColors(containerColor = ProxiDarkBlue)
+                                enabled = !isProcessingPhoto,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = ProxiDarkBlue,
+                                    contentColor = Color.White
+                                ),
+                                modifier = Modifier.fillMaxWidth().height(48.dp)
                             ) {
-                                Text("Ajouter cette photo")
+                                Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, tint = Color.White)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (isProcessingPhoto) "Traitement de la photo..." else "Choisir une photo dans la galerie",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
 
                         6 -> {
-                            // ÉTAPE 6 : RÉCAPITULATIF & SOUMISSION
                             Text("6. Récapitulatif et soumission", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ProxiDarkBlue)
                             Spacer(modifier = Modifier.height(12.dp))
 
-                            Text("Activité : ${draft.businessName.ifBlank { "(non renseigné)" }}", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                            Text("Catégorie : ${categories.find { it.id == draft.primaryCategoryId }?.name ?: ""}", fontSize = 13.sp)
-                            Text("Localisation : ${draft.city} (${draft.neighborhood}) • Dép./Région : ${draft.department}, ${draft.countryName}", fontSize = 13.sp)
-                            Text("Téléphone public : ${draft.phonePublic}", fontSize = 13.sp)
-                            Text("WhatsApp : ${draft.whatsappNumber}", fontSize = 13.sp)
-                            Text("Nombre de services : ${draft.services.size}", fontSize = 13.sp)
+                            if (draft.profileImage.isNotBlank()) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .clip(CircleShape)
+                                ) {
+                                    ProxiPhoto(
+                                        imageUrl = draft.profileImage,
+                                        contentDescription = "Photo du profil",
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(10.dp))
+                            }
+
+                            Text("Activité : ${draft.businessName.ifBlank { "(non renseigné)" }}", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = ProxiTextPrimary)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Catégorie : ${categories.find { it.id == draft.primaryCategoryId }?.name ?: ""}", fontSize = 14.sp, color = ProxiTextPrimary)
+                            Text("Localisation : ${draft.city} (${draft.neighborhood}) • ${draft.department}, ${draft.countryName}", fontSize = 14.sp, color = ProxiTextSecondary)
+                            Text("Téléphone public : ${draft.phonePublic}", fontSize = 14.sp, color = ProxiTextPrimary)
+                            Text("WhatsApp : ${draft.whatsappNumber}", fontSize = 14.sp, color = ProxiGreenText, fontWeight = FontWeight.SemiBold)
+                            Text("Services : ${draft.services.size} • Photos : ${draft.portfolioPhotos.size}", fontSize = 14.sp, color = ProxiTextSecondary)
 
                             Spacer(modifier = Modifier.height(14.dp))
 
@@ -606,17 +809,17 @@ fun ProWizardScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(ProxiBackground)
+                                    .background(Color(0xFFFEF3C7))
                                     .padding(12.dp)
                             ) {
                                 Row(verticalAlignment = Alignment.Top) {
-                                    Icon(Icons.Default.Info, contentDescription = null, tint = ProxiDarkBlue, modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Default.Info, contentDescription = null, tint = Color(0xFF92400E), modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = "Après soumission, votre profil sera mis en statut « En attente ». Un administrateur de ProxiAfrik vérifiera les informations sous 24h avant la mise en ligne.",
-                                        fontSize = 12.sp,
-                                        color = ProxiTextPrimary,
-                                        lineHeight = 16.sp
+                                        text = "Après soumission, votre profil reste en statut « En attente » et n'apparaîtra pas dans la recherche publique tant qu'un administrateur ne l'aura pas validé.",
+                                        fontSize = 13.sp,
+                                        color = Color(0xFF78350F),
+                                        lineHeight = 18.sp
                                     )
                                 }
                             }
@@ -625,7 +828,6 @@ fun ProWizardScreen(
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    // Navigation buttons
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -634,9 +836,10 @@ fun ProWizardScreen(
                         if (draft.currentStep > 1) {
                             OutlinedButton(
                                 onClick = { viewModel.prevWizardStep() },
-                                shape = RoundedCornerShape(8.dp)
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.height(48.dp)
                             ) {
-                                Text("Précédent")
+                                Text("Précédent", color = ProxiDarkBlue, fontWeight = FontWeight.SemiBold)
                             }
                         } else {
                             Spacer(modifier = Modifier.width(10.dp))
@@ -645,48 +848,67 @@ fun ProWizardScreen(
                         if (draft.currentStep < 6) {
                             Button(
                                 onClick = {
-                                    // Validation checks
                                     when (draft.currentStep) {
                                         1 -> {
-                                            if (draft.businessName.isBlank()) {
+                                            if (draft.businessName.trim().length < 2) {
                                                 Toast.makeText(context, "Veuillez renseigner le nom commercial", Toast.LENGTH_SHORT).show()
+                                                return@Button
+                                            }
+                                            if (draft.description.trim().length < 10) {
+                                                Toast.makeText(context, "Veuillez rédiger une description d'au moins 10 caractères", Toast.LENGTH_SHORT).show()
+                                                return@Button
+                                            }
+                                        }
+                                        2 -> {
+                                            if (draft.city.isBlank() || draft.neighborhood.trim().isBlank()) {
+                                                Toast.makeText(context, "Veuillez indiquer votre ville et votre quartier", Toast.LENGTH_SHORT).show()
                                                 return@Button
                                             }
                                         }
                                         4 -> {
-                                            if (draft.phonePublic.isBlank() || draft.whatsappNumber.isBlank()) {
-                                                Toast.makeText(context, "Veuillez renseigner les numéros de contact", Toast.LENGTH_SHORT).show()
+                                            if (draft.phonePublic.trim().length < 6 || draft.whatsappNumber.trim().length < 6) {
+                                                Toast.makeText(context, "Veuillez renseigner des numéros de téléphone et WhatsApp valides", Toast.LENGTH_SHORT).show()
                                                 return@Button
                                             }
                                             if (!draft.consentGiven) {
-                                                Toast.makeText(context, "Vous devez donner votre consentement pour la publication des coordonnées", Toast.LENGTH_LONG).show()
+                                                Toast.makeText(context, "Vous devez accepter la publication de vos coordonnées", Toast.LENGTH_LONG).show()
                                                 return@Button
                                             }
                                         }
                                     }
                                     viewModel.nextWizardStep()
                                 },
-                                colors = ButtonDefaults.buttonColors(containerColor = ProxiDarkBlue),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = ProxiDarkBlue,
+                                    contentColor = Color.White
+                                ),
                                 shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.testTag("wizard_next_button")
+                                modifier = Modifier.height(48.dp).testTag("wizard_next_button")
                             ) {
-                                Text("Suivant")
+                                Text("Suivant", color = Color.White, fontWeight = FontWeight.Bold)
                             }
                         } else {
                             Button(
                                 onClick = {
-                                    // Auto login as pro if not logged in
-                                    if (currentUser == null) {
-                                        viewModel.login("pro@proxiafrik.com", "PROFESSIONAL")
-                                    }
                                     viewModel.submitWizard()
-                                    Toast.makeText(context, "Profil soumis pour validation avec succès !", Toast.LENGTH_LONG).show()
                                 },
-                                colors = ButtonDefaults.buttonColors(containerColor = ProxiGreen),
+                                enabled = !isSubmitting,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = ProxiGreen,
+                                    contentColor = Color.White
+                                ),
                                 shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.testTag("wizard_submit_button")
+                                modifier = Modifier.height(48.dp).testTag("wizard_submit_button")
                             ) {
-                                Text("Soumettre pour validation", fontWeight = FontWeight.Bold)
+                                if (isSubmitting) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        color = Color.White,
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                }
+                                Text("Soumettre pour validation", fontWeight = FontWeight.Bold, color = Color.White)
                             }
                         }
                     }
@@ -698,11 +920,11 @@ fun ProWizardScreen(
 
 private fun getStepTitle(step: Int): String {
     return when (step) {
-        1 -> "Activité"
+        1 -> "Activité & Photo"
         2 -> "Localisation"
         3 -> "Services"
         4 -> "Contact"
-        5 -> "Photos"
+        5 -> "Réalisations"
         else -> "Récapitulatif"
     }
 }

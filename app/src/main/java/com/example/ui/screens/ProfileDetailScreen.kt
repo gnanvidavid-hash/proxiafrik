@@ -5,9 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -52,7 +50,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -79,15 +76,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import coil.compose.AsyncImage
-import com.example.data.local.PortfolioImageEntity
-import com.example.data.local.ReviewEntity
+import com.example.data.model.PortfolioPhoto
+import com.example.data.model.ReviewItem
 import com.example.ui.components.CategoryIconHelper
+import com.example.ui.components.ProxiPhoto
 import com.example.ui.theme.ProxiAmber
 import com.example.ui.theme.ProxiBackground
 import com.example.ui.theme.ProxiBorder
 import com.example.ui.theme.ProxiDarkBlue
 import com.example.ui.theme.ProxiGreen
+import com.example.ui.theme.ProxiGreenText
+import com.example.ui.theme.ProxiRed
 import com.example.ui.theme.ProxiTextPrimary
 import com.example.ui.theme.ProxiTextSecondary
 import com.example.ui.viewmodel.ProxiAfrikViewModel
@@ -116,8 +115,7 @@ fun ProfileDetailScreen(
     var reviewerName by remember { mutableStateOf("") }
     var reviewComment by remember { mutableStateOf("") }
 
-    // Lightbox state for zooming portfolio image
-    var selectedPortfolioImage by remember { mutableStateOf<PortfolioImageEntity?>(null) }
+    var selectedPortfolioImage by remember { mutableStateOf<PortfolioPhoto?>(null) }
 
     if (pro == null) {
         Box(
@@ -127,14 +125,12 @@ fun ProfileDetailScreen(
                 .testTag("profile_detail_loading"),
             contentAlignment = Alignment.Center
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "Chargement du profil...",
-                    color = ProxiTextSecondary,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
+            Text(
+                text = "Chargement du profil...",
+                color = ProxiTextSecondary,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium
+            )
         }
         return
     }
@@ -142,12 +138,10 @@ fun ProfileDetailScreen(
     val currentPro = pro!!
     val category = categories.find { it.id == currentPro.primaryCategoryId }
 
-    // Calculations for customer ratings
     val reviewCount = reviews.size
     val averageRating = if (reviews.isEmpty()) 5.0 else reviews.map { it.rating }.average()
     val formattedAverage = String.format(Locale.US, "%.1f", averageRating)
 
-    // Rating breakdown distribution (count of 5-star, 4-star, 3-star, 2-star, 1-star)
     val starCounts = remember(reviews) {
         (5 downTo 1).associateWith { star -> reviews.count { it.rating == star } }
     }
@@ -160,7 +154,7 @@ fun ProfileDetailScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // --- 0. TOP ACTION BAR (Retour, Partage, Signalement) ---
+        // --- 0. TOP ACTION BAR ---
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -172,7 +166,7 @@ fun ProfileDetailScreen(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .clickable { viewModel.navigateBack() }
-                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                        .padding(horizontal = 8.dp, vertical = 8.dp)
                         .testTag("profile_back_button")
                 ) {
                     Icon(
@@ -183,14 +177,14 @@ fun ProfileDetailScreen(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Retour aux résultats",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        text = "Retour",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
                         color = ProxiDarkBlue
                     )
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     IconButton(
                         onClick = {
                             val shareText = "Découvrez ${currentPro.businessName} sur ProxiAfrik (${currentPro.city}, ${currentPro.countryName}) : Téléphone : ${currentPro.phonePublic} / WhatsApp : ${currentPro.whatsappNumber}"
@@ -206,19 +200,19 @@ fun ProfileDetailScreen(
                             imageVector = Icons.Default.Share,
                             contentDescription = "Partager la fiche",
                             tint = ProxiDarkBlue,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(22.dp)
                         )
                     }
 
                     IconButton(
                         onClick = { showReportDialog = true },
-                        modifier = Modifier.testTag("report_profile_button")
+                        modifier = Modifier.testTag("report_profile_icon_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Flag,
-                            contentDescription = "Signaler un problème",
-                            tint = Color(0xFFEF4444),
-                            modifier = Modifier.size(20.dp)
+                            contentDescription = "Signaler ce profil",
+                            tint = ProxiRed,
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 }
@@ -238,14 +232,13 @@ fun ProfileDetailScreen(
                         .fillMaxWidth()
                         .padding(18.dp)
                 ) {
-                    // Top row: Avatar + Name + Badges
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.Top
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(64.dp)
+                                .size(68.dp)
                                 .clip(RoundedCornerShape(14.dp))
                                 .background(
                                     Brush.linearGradient(
@@ -254,11 +247,19 @@ fun ProfileDetailScreen(
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = currentPro.businessName.firstOrNull()?.uppercase() ?: "P",
-                                fontSize = 28.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color.White
+                            ProxiPhoto(
+                                imageUrl = currentPro.profileImage,
+                                contentDescription = currentPro.businessName,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                                fallbackContent = {
+                                    Text(
+                                        text = currentPro.businessName.firstOrNull()?.uppercase() ?: "P",
+                                        fontSize = 28.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color.White
+                                    )
+                                }
                             )
                         }
 
@@ -287,25 +288,24 @@ fun ProfileDetailScreen(
 
                             Spacer(modifier = Modifier.height(4.dp))
 
-                            // Category badge
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(6.dp))
-                                    .background(ProxiDarkBlue.copy(alpha = 0.08f))
-                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                                    .background(ProxiDarkBlue.copy(alpha = 0.09f))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
                                 val catIcon = CategoryIconHelper.getIcon(category?.iconKey ?: "")
                                 Icon(
                                     imageVector = catIcon,
                                     contentDescription = null,
                                     tint = ProxiDarkBlue,
-                                    modifier = Modifier.size(14.dp)
+                                    modifier = Modifier.size(15.dp)
                                 )
                                 Spacer(modifier = Modifier.width(5.dp))
                                 Text(
                                     text = category?.name ?: "Prestataire de services",
-                                    fontSize = 12.sp,
+                                    fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = ProxiDarkBlue
                                 )
@@ -315,17 +315,15 @@ fun ProfileDetailScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // Rating & Metrics summary bar
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
                             .background(ProxiBackground)
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        // Rating
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Default.Star,
@@ -343,41 +341,38 @@ fun ProfileDetailScreen(
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = "($reviewCount avis)",
-                                fontSize = 12.sp,
+                                fontSize = 13.sp,
                                 color = ProxiTextSecondary
                             )
                         }
 
-                        // Views count
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Default.Visibility,
                                 contentDescription = null,
                                 tint = ProxiTextSecondary,
-                                modifier = Modifier.size(15.dp)
+                                modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = "${currentPro.viewsCount} vues",
-                                fontSize = 12.sp,
+                                fontSize = 13.sp,
                                 color = ProxiTextSecondary
                             )
                         }
 
-                        // Verified Status Chip
                         if (currentPro.verificationStatus == "APPROVED") {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
+                            Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(4.dp))
-                                    .background(ProxiGreen.copy(alpha = 0.12f))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    .background(ProxiGreen.copy(alpha = 0.14f))
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
                             ) {
                                 Text(
                                     text = "Vérifié",
-                                    fontSize = 11.sp,
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = ProxiGreen
+                                    color = ProxiGreenText
                                 )
                             }
                         }
@@ -385,7 +380,6 @@ fun ProfileDetailScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Primary Direct Contact Actions (WhatsApp & Phone)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -396,13 +390,16 @@ fun ProfileDetailScreen(
                                 .weight(1f)
                                 .height(50.dp)
                                 .testTag("detail_whatsapp_button"),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366)),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = ProxiGreenText,
+                                contentColor = Color.White
+                            ),
                             shape = RoundedCornerShape(10.dp)
                         ) {
                             Text(
-                                text = "WhatsApp direct",
+                                text = "WhatsApp",
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
+                                fontSize = 15.sp,
                                 color = Color.White
                             )
                         }
@@ -413,7 +410,10 @@ fun ProfileDetailScreen(
                                 .weight(1f)
                                 .height(50.dp)
                                 .testTag("detail_call_button"),
-                            colors = ButtonDefaults.buttonColors(containerColor = ProxiGreen),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = ProxiDarkBlue,
+                                contentColor = Color.White
+                            ),
                             shape = RoundedCornerShape(10.dp)
                         ) {
                             Icon(
@@ -426,7 +426,7 @@ fun ProfileDetailScreen(
                             Text(
                                 text = "Appeler",
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
+                                fontSize = 15.sp,
                                 color = Color.White
                             )
                         }
@@ -435,7 +435,7 @@ fun ProfileDetailScreen(
             }
         }
 
-        // --- 2. USER CONTACT INFORMATION & GEOGRAPHIC DETAILS ---
+        // --- 2. CONTACT INFORMATION & GEOGRAPHY ---
         item {
             Card(
                 modifier = Modifier
@@ -459,7 +459,6 @@ fun ProfileDetailScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Direct Phone row with 1-tap Copy action
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -483,7 +482,7 @@ fun ProfileDetailScreen(
                                 Icon(
                                     imageVector = Icons.Default.Call,
                                     contentDescription = null,
-                                    tint = ProxiGreen,
+                                    tint = ProxiGreenText,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -491,7 +490,7 @@ fun ProfileDetailScreen(
                             Column {
                                 Text(
                                     text = "Téléphone direct",
-                                    fontSize = 11.sp,
+                                    fontSize = 12.sp,
                                     color = ProxiTextSecondary
                                 )
                                 Text(
@@ -523,12 +522,11 @@ fun ProfileDetailScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // WhatsApp number row
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFF25D366).copy(alpha = 0.08f))
+                            .background(ProxiGreen.copy(alpha = 0.08f))
                             .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -541,28 +539,28 @@ fun ProfileDetailScreen(
                                 modifier = Modifier
                                     .size(36.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0xFF25D366).copy(alpha = 0.2f)),
+                                    .background(ProxiGreen.copy(alpha = 0.2f)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
                                     text = "WA",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp,
-                                    color = Color(0xFF1E7E34)
+                                    color = ProxiGreenText
                                 )
                             }
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
                                     text = "WhatsApp professionnel",
-                                    fontSize = 11.sp,
+                                    fontSize = 12.sp,
                                     color = ProxiTextSecondary
                                 )
                                 Text(
                                     text = currentPro.whatsappNumber,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF1E7E34)
+                                    color = ProxiGreenText
                                 )
                             }
                         }
@@ -579,7 +577,7 @@ fun ProfileDetailScreen(
                             Icon(
                                 imageVector = Icons.Default.ContentCopy,
                                 contentDescription = "Copier WhatsApp",
-                                tint = Color(0xFF1E7E34),
+                                tint = ProxiGreenText,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -587,15 +585,12 @@ fun ProfileDetailScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // Location Hierarchy: Quartier, Ville, Département, Pays
                     Row(verticalAlignment = Alignment.Top) {
                         Icon(
                             imageVector = Icons.Default.LocationOn,
                             contentDescription = null,
                             tint = ProxiDarkBlue,
-                            modifier = Modifier
-                                .size(18.dp)
-                                .padding(top = 2.dp)
+                            modifier = Modifier.size(18.dp).padding(top = 2.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
@@ -605,7 +600,7 @@ fun ProfileDetailScreen(
                                 }
                                 append(currentPro.city)
                                 if (currentPro.department.isNotBlank()) {
-                                    append(" • Dép. ").append(currentPro.department)
+                                    append(" • ").append(currentPro.department)
                                 }
                                 append(", ").append(currentPro.countryName)
                             }
@@ -617,7 +612,7 @@ fun ProfileDetailScreen(
                             )
                             Text(
                                 text = "Localisation principale déclarée",
-                                fontSize = 11.sp,
+                                fontSize = 12.sp,
                                 color = ProxiTextSecondary
                             )
                         }
@@ -626,8 +621,8 @@ fun ProfileDetailScreen(
                     if (currentPro.interventionZones.isNotBlank()) {
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = "Périmètre & zones d'intervention :",
-                            fontSize = 12.sp,
+                            text = "Zones d'intervention :",
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = ProxiDarkBlue
                         )
@@ -646,7 +641,7 @@ fun ProfileDetailScreen(
                                 ) {
                                     Text(
                                         text = zone,
-                                        fontSize = 11.sp,
+                                        fontSize = 12.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = ProxiDarkBlue
                                     )
@@ -659,7 +654,6 @@ fun ProfileDetailScreen(
                     HorizontalDivider(color = ProxiBorder)
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Opening hours and real-time response indicator
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
@@ -667,29 +661,22 @@ fun ProfileDetailScreen(
                         Icon(
                             imageVector = Icons.Default.AccessTime,
                             contentDescription = null,
-                            tint = ProxiGreen,
+                            tint = ProxiGreenText,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Horaires : ${currentPro.openingHours}",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = ProxiTextPrimary
-                            )
-                            Text(
-                                text = "Répond généralement en moins de 30 minutes",
-                                fontSize = 11.sp,
-                                color = ProxiGreen
-                            )
-                        }
+                        Text(
+                            text = "Horaires : ${currentPro.openingHours.ifBlank { "Sur rendez-vous" }}",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = ProxiTextPrimary
+                        )
                     }
                 }
             }
         }
 
-        // --- 3. ABOUT / DESCRIPTION ---
+        // --- 3. ABOUT ---
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -719,7 +706,7 @@ fun ProfileDetailScreen(
             }
         }
 
-        // --- 4. SERVICE PORTFOLIO IMAGES (GALERIE DE RÉALISATIONS) ---
+        // --- 4. PORTFOLIO ---
         item {
             Card(
                 modifier = Modifier
@@ -748,17 +735,17 @@ fun ProfileDetailScreen(
                             )
                             Text(
                                 text = "${portfolio.size} photo(s) de chantiers et travaux",
-                                fontSize = 12.sp,
+                                fontSize = 13.sp,
                                 color = ProxiTextSecondary
                             )
                         }
 
                         if (portfolio.isNotEmpty()) {
                             Text(
-                                text = "Touchez pour agrandir",
-                                fontSize = 11.sp,
-                                color = ProxiGreen,
-                                fontWeight = FontWeight.Medium
+                                text = "Agrandir",
+                                fontSize = 13.sp,
+                                color = ProxiGreenText,
+                                fontWeight = FontWeight.SemiBold
                             )
                         }
                     }
@@ -775,20 +762,18 @@ fun ProfileDetailScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "Aucune photo de réalisation publiée pour l'instant par ce professionnel.",
+                                text = "Aucune photo de réalisation publiée pour l'instant.",
                                 fontSize = 13.sp,
                                 color = ProxiTextSecondary,
                                 textAlign = TextAlign.Center
                             )
                         }
                     } else {
-                        // Display portfolio items in modern showcase cards
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             portfolio.forEachIndexed { index, item ->
                                 PortfolioItemCard(
                                     item = item,
                                     index = index,
-                                    category = category?.name ?: "Réalisation",
                                     onClick = { selectedPortfolioImage = item }
                                 )
                             }
@@ -798,7 +783,7 @@ fun ProfileDetailScreen(
             }
         }
 
-        // --- 5. SERVICES & TARIFS INDICATIFS ---
+        // --- 5. SERVICES & TARIFS ---
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -820,7 +805,6 @@ fun ProfileDetailScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Notice required by specification
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -832,15 +816,15 @@ fun ProfileDetailScreen(
                             Icon(
                                 Icons.Default.Info,
                                 contentDescription = null,
-                                tint = Color(0xFFD97706),
+                                tint = Color(0xFF92400E),
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Les tarifs indiqués sont indicatifs. Les conditions et devis finaux sont convenus directement avec le professionnel, sans frais d'intermédiaire.",
-                                fontSize = 11.sp,
-                                color = Color(0xFF92400E),
-                                lineHeight = 15.sp
+                                text = "Les tarifs indiqués sont indicatifs. Les devis finaux sont convenus directement avec le professionnel.",
+                                fontSize = 12.sp,
+                                color = Color(0xFF78350F),
+                                lineHeight = 16.sp
                             )
                         }
                     }
@@ -850,7 +834,7 @@ fun ProfileDetailScreen(
                     if (services.isEmpty()) {
                         Text(
                             text = "Prestations sur devis personnalisé.",
-                            fontSize = 13.sp,
+                            fontSize = 14.sp,
                             color = ProxiTextSecondary
                         )
                     } else {
@@ -872,7 +856,7 @@ fun ProfileDetailScreen(
                                     if (srv.description.isNotBlank()) {
                                         Text(
                                             text = srv.description,
-                                            fontSize = 12.sp,
+                                            fontSize = 13.sp,
                                             color = ProxiTextSecondary
                                         )
                                     }
@@ -886,14 +870,14 @@ fun ProfileDetailScreen(
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(6.dp))
-                                        .background(ProxiGreen.copy(alpha = 0.1f))
+                                        .background(ProxiGreen.copy(alpha = 0.12f))
                                         .padding(horizontal = 8.dp, vertical = 4.dp)
                                 ) {
                                     Text(
                                         text = priceLabel,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = ProxiGreen
+                                        color = ProxiGreenText
                                     )
                                 }
                             }
@@ -906,7 +890,7 @@ fun ProfileDetailScreen(
             }
         }
 
-        // --- 6. CUSTOMER RATINGS & REVIEWS SECTION ---
+        // --- 6. RATINGS & REVIEWS ---
         item {
             Card(
                 modifier = Modifier
@@ -940,13 +924,13 @@ fun ProfileDetailScreen(
                             Icon(
                                 imageVector = Icons.Default.RateReview,
                                 contentDescription = null,
-                                tint = ProxiGreen,
+                                tint = ProxiGreenText,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = "Donner un avis",
-                                color = ProxiGreen,
+                                color = ProxiGreenText,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -954,7 +938,6 @@ fun ProfileDetailScreen(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Overall Score + Star Distribution Breakdown
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -963,14 +946,13 @@ fun ProfileDetailScreen(
                             .padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Left score box
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier.padding(end = 16.dp)
                         ) {
                             Text(
                                 text = formattedAverage,
-                                fontSize = 34.sp,
+                                fontSize = 32.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = ProxiDarkBlue
                             )
@@ -988,13 +970,12 @@ fun ProfileDetailScreen(
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = "$reviewCount avis",
-                                fontSize = 11.sp,
+                                fontSize = 12.sp,
                                 color = ProxiTextSecondary,
                                 fontWeight = FontWeight.Medium
                             )
                         }
 
-                        // Right: 5 to 1 star progress distribution
                         Column(
                             modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -1008,9 +989,9 @@ fun ProfileDetailScreen(
                                 ) {
                                     Text(
                                         text = "${star}★",
-                                        fontSize = 11.sp,
+                                        fontSize = 12.sp,
                                         color = ProxiTextSecondary,
-                                        modifier = Modifier.width(22.dp)
+                                        modifier = Modifier.width(24.dp)
                                     )
                                     LinearProgressIndicator(
                                         progress = { fraction },
@@ -1019,12 +1000,12 @@ fun ProfileDetailScreen(
                                             .height(6.dp)
                                             .clip(RoundedCornerShape(3.dp)),
                                         color = ProxiAmber,
-                                        trackColor = Color(0xFFE2E8F0),
+                                        trackColor = Color(0xFFE2E8F0)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
                                         text = "$count",
-                                        fontSize = 11.sp,
+                                        fontSize = 12.sp,
                                         color = ProxiTextSecondary,
                                         modifier = Modifier.width(18.dp)
                                     )
@@ -1035,23 +1016,20 @@ fun ProfileDetailScreen(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Moderation & Trust guarantee
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Verified,
                             contentDescription = null,
-                            tint = ProxiGreen,
-                            modifier = Modifier.size(14.dp)
+                            tint = ProxiGreenText,
+                            modifier = Modifier.size(15.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Avis contrôlés et vérifiés selon la charte qualité ProxiAfrik",
-                            fontSize = 11.sp,
+                            text = "Avis contrôlés selon la charte qualité ProxiAfrik",
+                            fontSize = 12.sp,
                             color = ProxiTextSecondary
                         )
                     }
@@ -1060,7 +1038,6 @@ fun ProfileDetailScreen(
                     HorizontalDivider(color = ProxiBorder)
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // Customer Reviews List
                     if (reviews.isEmpty()) {
                         Text(
                             text = "Aucun avis pour l'instant. Soyez le premier client à partager votre expérience !",
@@ -1077,9 +1054,35 @@ fun ProfileDetailScreen(
                 }
             }
         }
+
+        // --- 7. EXPLICIT "SIGNALER CE PROFIL" ACTION ---
+        item {
+            OutlinedButton(
+                onClick = { showReportDialog = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .testTag("report_profile_button"),
+                shape = RoundedCornerShape(10.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, ProxiRed)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Flag,
+                    contentDescription = null,
+                    tint = ProxiRed,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Signaler ce profil",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = ProxiRed
+                )
+            }
+        }
     }
 
-    // --- FULLSCREEN LIGHTBOX FOR PORTFOLIO IMAGE ---
     selectedPortfolioImage?.let { photo ->
         Dialog(onDismissRequest = { selectedPortfolioImage = null }) {
             Surface(
@@ -1101,8 +1104,8 @@ fun ProfileDetailScreen(
                             .background(ProxiDarkBlue.copy(alpha = 0.08f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        AsyncImage(
-                            model = photo.imageUrl,
+                        ProxiPhoto(
+                            imageUrl = photo.imageUrl,
                             contentDescription = photo.caption,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize()
@@ -1121,8 +1124,8 @@ fun ProfileDetailScreen(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = "Réalisation certifiée de ${currentPro.businessName}",
-                        fontSize = 12.sp,
+                        text = "Réalisation de ${currentPro.businessName}",
+                        fontSize = 13.sp,
                         color = ProxiTextSecondary
                     )
 
@@ -1137,17 +1140,20 @@ fun ProfileDetailScreen(
                                 selectedPortfolioImage = null
                                 viewModel.contactViaWhatsApp(context, currentPro)
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366)),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = ProxiGreenText,
+                                contentColor = Color.White
+                            ),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Devis pour ce travail", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text("Devis WhatsApp", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
                         }
 
                         OutlinedButton(
                             onClick = { selectedPortfolioImage = null },
                             modifier = Modifier.weight(0.7f)
                         ) {
-                            Text("Fermer", fontSize = 13.sp)
+                            Text("Fermer", fontSize = 13.sp, color = ProxiDarkBlue)
                         }
                     }
                 }
@@ -1155,23 +1161,31 @@ fun ProfileDetailScreen(
         }
     }
 
-    // --- REPORT DIALOG ---
     if (showReportDialog) {
         AlertDialog(
             onDismissRequest = { showReportDialog = false },
-            title = { Text("Signaler un problème sur ce profil") },
+            title = { Text("Signaler ce profil", fontWeight = FontWeight.Bold, color = ProxiDarkBlue) },
             text = {
                 Column {
                     Text(
-                        text = "Aidez-nous à préserver la fiabilité de ProxiAfrik. Précisez la nature de l'irrégularité :",
+                        text = "Signalez toute irrégularité (faux numéro, comportement inapproprié, arnaque) :",
                         fontSize = 13.sp,
                         color = ProxiTextSecondary
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     OutlinedTextField(
+                        value = reportReason,
+                        onValueChange = { reportReason = it },
+                        label = { Text("Motif du signalement") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
                         value = reportDetails,
                         onValueChange = { reportDetails = it },
-                        placeholder = { Text("Ex: Faux numéro, comportement suspect, artisan injoignable...") },
+                        label = { Text("Détails") },
+                        placeholder = { Text("Décrivez le problème constaté...") },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 3
                     )
@@ -1180,24 +1194,27 @@ fun ProfileDetailScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.submitReport(currentPro.id, reportReason, reportDetails)
+                        viewModel.submitReport(
+                            currentPro.id,
+                            reportReason.trim().ifBlank { "Signalement utilisateur" },
+                            reportDetails.trim()
+                        )
                         showReportDialog = false
-                        Toast.makeText(context, "Signalement envoyé aux modérateurs. Merci.", Toast.LENGTH_SHORT).show()
+                        reportDetails = ""
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
+                    colors = ButtonDefaults.buttonColors(containerColor = ProxiRed, contentColor = Color.White)
                 ) {
-                    Text("Envoyer le signalement")
+                    Text("Envoyer le signalement", color = Color.White, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showReportDialog = false }) {
-                    Text("Annuler")
+                    Text("Annuler", color = ProxiTextSecondary)
                 }
             }
         )
     }
 
-    // --- REVIEW DIALOG ---
     if (showReviewDialog) {
         AlertDialog(
             onDismissRequest = { showReviewDialog = false },
@@ -1212,13 +1229,12 @@ fun ProfileDetailScreen(
             text = {
                 Column {
                     Text(
-                        text = "Notez la prestation réalisée par ${currentPro.businessName} :",
+                        text = "Notez la prestation de ${currentPro.businessName} :",
                         fontSize = 13.sp,
                         color = ProxiTextSecondary
                     )
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Clickable 5-star rating selector
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.Center
@@ -1242,8 +1258,8 @@ fun ProfileDetailScreen(
                     OutlinedTextField(
                         value = reviewerName,
                         onValueChange = { reviewerName = it },
-                        label = { Text("Votre nom ou prénom") },
-                        placeholder = { Text("Ex: Aïcha D., Marcelle K.") },
+                        label = { Text("Votre nom (facultatif)") },
+                        placeholder = { Text("Ex: Aïcha D.") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
@@ -1253,11 +1269,9 @@ fun ProfileDetailScreen(
                     OutlinedTextField(
                         value = reviewComment,
                         onValueChange = { reviewComment = it },
-                        label = { Text("Votre retour d'expérience") },
-                        placeholder = { Text("Détaillez la qualité du travail, la ponctualité, le respect du devis...") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("review_comment_input"),
+                        label = { Text("Votre commentaire *") },
+                        placeholder = { Text("Qualité du travail, ponctualité, respect du devis...") },
+                        modifier = Modifier.fillMaxWidth().testTag("review_comment_input"),
                         minLines = 3
                     )
                 }
@@ -1265,7 +1279,7 @@ fun ProfileDetailScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        if (reviewComment.isNotBlank()) {
+                        if (reviewComment.trim().length >= 2) {
                             viewModel.submitReview(
                                 profileId = currentPro.id,
                                 rating = reviewRating,
@@ -1276,20 +1290,19 @@ fun ProfileDetailScreen(
                             reviewComment = ""
                             reviewRating = 5
                             showReviewDialog = false
-                            Toast.makeText(context, "Votre avis a été publié avec succès. Merci !", Toast.LENGTH_SHORT).show()
                         } else {
-                            Toast.makeText(context, "Veuillez écrire un commentaire avant de valider.", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Veuillez écrire un commentaire.", Toast.LENGTH_SHORT).show()
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ProxiGreen),
+                    colors = ButtonDefaults.buttonColors(containerColor = ProxiGreen, contentColor = Color.White),
                     modifier = Modifier.testTag("submit_review_button")
                 ) {
-                    Text("Publier mon avis")
+                    Text("Publier mon avis", color = Color.White, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showReviewDialog = false }) {
-                    Text("Annuler")
+                    Text("Annuler", color = ProxiTextSecondary)
                 }
             }
         )
@@ -1298,9 +1311,8 @@ fun ProfileDetailScreen(
 
 @Composable
 fun PortfolioItemCard(
-    item: PortfolioImageEntity,
+    item: PortfolioPhoto,
     index: Int,
-    category: String,
     onClick: () -> Unit
 ) {
     Card(
@@ -1316,25 +1328,24 @@ fun PortfolioItemCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(150.dp)
+                    .height(160.dp)
                     .background(ProxiDarkBlue.copy(alpha = 0.08f)),
                 contentAlignment = Alignment.Center
             ) {
-                AsyncImage(
-                    model = item.imageUrl,
+                ProxiPhoto(
+                    imageUrl = item.imageUrl,
                     contentDescription = item.caption,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
                 )
 
-                // Enlarge icon overlay
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(8.dp)
                         .size(32.dp)
                         .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.55f)),
+                        .background(Color.Black.copy(alpha = 0.6f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -1349,7 +1360,7 @@ fun PortfolioItemCard(
             Column(modifier = Modifier.padding(12.dp)) {
                 Text(
                     text = item.caption,
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = ProxiTextPrimary,
                     maxLines = 2,
@@ -1362,14 +1373,14 @@ fun PortfolioItemCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "Chantier vérifié",
-                        fontSize = 11.sp,
+                        text = "Réalisation publiée",
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
-                        color = ProxiGreen
+                        color = ProxiGreenText
                     )
                     Text(
-                        text = "Touchez pour détails",
-                        fontSize = 11.sp,
+                        text = "Touchez pour agrandir",
+                        fontSize = 12.sp,
                         color = ProxiTextSecondary
                     )
                 }
@@ -1379,15 +1390,16 @@ fun PortfolioItemCard(
 }
 
 @Composable
-fun CustomerReviewItem(review: ReviewEntity) {
-    val formattedDate = remember(review.createdAt) {
-        val diff = System.currentTimeMillis() - review.createdAt
+fun CustomerReviewItem(review: ReviewItem) {
+    val reviewTimeMs = review.createdAt?.toDate()?.time ?: System.currentTimeMillis()
+    val formattedDate = remember(reviewTimeMs) {
+        val diff = System.currentTimeMillis() - reviewTimeMs
         val days = diff / (1000 * 60 * 60 * 24)
         when {
             days <= 0 -> "Aujourd'hui"
             days == 1L -> "Hier"
             days < 30 -> "Il y a $days jours"
-            else -> SimpleDateFormat("dd MMM yyyy", Locale.FRENCH).format(Date(review.createdAt))
+            else -> SimpleDateFormat("dd MMM yyyy", Locale.FRENCH).format(Date(reviewTimeMs))
         }
     }
 
@@ -1432,18 +1444,17 @@ fun CustomerReviewItem(review: ReviewEntity) {
                             imageVector = Icons.Default.CheckCircle,
                             contentDescription = "Client vérifié",
                             tint = ProxiGreen,
-                            modifier = Modifier.size(13.dp)
+                            modifier = Modifier.size(14.dp)
                         )
                     }
                     Text(
                         text = formattedDate,
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         color = ProxiTextSecondary
                     )
                 }
             }
 
-            // Star rating row
             Row {
                 repeat(review.rating) {
                     Icon(
@@ -1460,9 +1471,9 @@ fun CustomerReviewItem(review: ReviewEntity) {
 
         Text(
             text = review.comment,
-            fontSize = 13.sp,
+            fontSize = 14.sp,
             color = ProxiTextPrimary,
-            lineHeight = 18.sp
+            lineHeight = 20.sp
         )
 
         Spacer(modifier = Modifier.height(6.dp))
@@ -1471,15 +1482,15 @@ fun CustomerReviewItem(review: ReviewEntity) {
             Icon(
                 imageVector = Icons.Default.ThumbUp,
                 contentDescription = null,
-                tint = ProxiGreen,
-                modifier = Modifier.size(12.dp)
+                tint = ProxiGreenText,
+                modifier = Modifier.size(13.dp)
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text(
                 text = "Recommande ce professionnel",
-                fontSize = 11.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
-                color = ProxiGreen
+                color = ProxiGreenText
             )
         }
     }

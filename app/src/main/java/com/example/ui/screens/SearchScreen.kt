@@ -20,7 +20,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
@@ -52,15 +51,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.local.CategoryEntity
 import com.example.ui.components.ProfileCard
-import com.example.ui.navigation.Screen
 import com.example.ui.theme.ProxiBackground
 import com.example.ui.theme.ProxiBorder
 import com.example.ui.theme.ProxiDarkBlue
 import com.example.ui.theme.ProxiGreen
+import com.example.ui.theme.ProxiSurfaceVariant
 import com.example.ui.theme.ProxiTextPrimary
 import com.example.ui.theme.ProxiTextSecondary
 import com.example.ui.viewmodel.ProxiAfrikViewModel
@@ -85,7 +84,6 @@ fun SearchScreen(
             .background(ProxiBackground)
             .testTag("search_screen")
     ) {
-        // --- Filter Header Surface ---
         Surface(
             color = Color.White,
             tonalElevation = 2.dp,
@@ -96,11 +94,16 @@ fun SearchScreen(
                     .fillMaxWidth()
                     .padding(16.dp)
             ) {
-                // Search Input
                 OutlinedTextField(
                     value = searchFilter.query,
                     onValueChange = { viewModel.updateSearchQuery(it) },
-                    placeholder = { Text("Service ou mot-clé (ex: plomberie, meuble)") },
+                    placeholder = {
+                        Text(
+                            text = "Service ou mot-clé (ex: plomberie, électricité)",
+                            color = ProxiTextSecondary,
+                            fontSize = 14.sp
+                        )
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("search_query_input"),
@@ -112,11 +115,15 @@ fun SearchScreen(
                     trailingIcon = {
                         if (searchFilter.query.isNotEmpty()) {
                             IconButton(onClick = { viewModel.updateSearchQuery("") }) {
-                                Icon(Icons.Default.Clear, contentDescription = "Effacer")
+                                Icon(Icons.Default.Clear, contentDescription = "Effacer", tint = ProxiTextPrimary)
                             }
                         }
                     },
                     colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = ProxiTextPrimary,
+                        unfocusedTextColor = ProxiTextPrimary,
+                        focusedPlaceholderColor = ProxiTextSecondary,
+                        unfocusedPlaceholderColor = ProxiTextSecondary,
                         focusedBorderColor = ProxiGreen,
                         unfocusedBorderColor = ProxiBorder
                     )
@@ -124,32 +131,32 @@ fun SearchScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Location selector row 1: Pays & Département
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Country Picker
                     Box(modifier = Modifier.weight(1f)) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(ProxiBackground)
+                                .background(ProxiSurfaceVariant)
                                 .clickable { countryMenuExpanded = true }
-                                .padding(horizontal = 10.dp, vertical = 9.dp),
+                                .padding(horizontal = 10.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.LocationOn, contentDescription = null, tint = ProxiDarkBlue, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.LocationOn, contentDescription = null, tint = ProxiDarkBlue, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(4.dp))
                             Column {
-                                Text("Pays", fontSize = 9.sp, color = ProxiTextSecondary)
+                                Text("Pays", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = ProxiTextSecondary)
                                 Text(
                                     text = selectedCountry.name,
-                                    fontSize = 12.sp,
+                                    fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = ProxiTextPrimary
+                                    color = ProxiTextPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -160,7 +167,7 @@ fun SearchScreen(
                         ) {
                             viewModel.countries.forEach { country ->
                                 DropdownMenuItem(
-                                    text = { Text("${country.name} (${country.code})") },
+                                    text = { Text("${country.name} (${country.code})", color = ProxiTextPrimary) },
                                     onClick = {
                                         viewModel.setCountry(country)
                                         countryMenuExpanded = false
@@ -170,24 +177,25 @@ fun SearchScreen(
                         }
                     }
 
-                    // Department Picker
                     Box(modifier = Modifier.weight(1.2f)) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(ProxiBackground)
+                                .background(ProxiSurfaceVariant)
                                 .clickable { departmentMenuExpanded = true }
-                                .padding(horizontal = 10.dp, vertical = 9.dp),
+                                .padding(horizontal = 10.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column {
-                                Text("Département / Région", fontSize = 9.sp, color = ProxiTextSecondary)
+                                Text("Département / Région", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = ProxiTextSecondary)
                                 Text(
                                     text = if (searchFilter.department.isNotBlank()) searchFilter.department else "Tous départements",
-                                    fontSize = 12.sp,
+                                    fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (searchFilter.department.isNotBlank()) ProxiDarkBlue else ProxiTextSecondary
+                                    color = if (searchFilter.department.isNotBlank()) ProxiDarkBlue else ProxiTextPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -197,7 +205,7 @@ fun SearchScreen(
                             onDismissRequest = { departmentMenuExpanded = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text("Tous les départements") },
+                                text = { Text("Tous les départements", color = ProxiTextPrimary) },
                                 onClick = {
                                     viewModel.updateSearchLocation(selectedCountry.code, "", searchFilter.city, searchFilter.neighborhood)
                                     departmentMenuExpanded = false
@@ -205,7 +213,7 @@ fun SearchScreen(
                             )
                             selectedCountry.departments.forEach { dept ->
                                 DropdownMenuItem(
-                                    text = { Text(dept.name) },
+                                    text = { Text(dept.name, color = ProxiTextPrimary) },
                                     onClick = {
                                         viewModel.setDepartment(dept.name)
                                         departmentMenuExpanded = false
@@ -218,36 +226,37 @@ fun SearchScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Location selector row 2: Ville & Quartier
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // City selector badge
                     Box(modifier = Modifier.weight(1f)) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(ProxiBackground)
+                                .background(ProxiSurfaceVariant)
                                 .clickable { cityMenuExpanded = true }
-                                .padding(horizontal = 10.dp, vertical = 9.dp),
+                                .padding(horizontal = 10.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column {
-                                Text("Ville", fontSize = 9.sp, color = ProxiTextSecondary)
+                                Text("Ville", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = ProxiTextSecondary)
                                 Text(
                                     text = if (searchFilter.city.isNotBlank()) searchFilter.city else "Toutes villes",
-                                    fontSize = 12.sp,
+                                    fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (searchFilter.city.isNotBlank()) ProxiTextPrimary else ProxiTextSecondary
+                                    color = ProxiTextPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
 
                         val availableCities = if (searchFilter.department.isNotBlank()) {
-                            selectedCountry.departments.find { it.name.equals(searchFilter.department, ignoreCase = true) }?.cities ?: selectedCountry.allCities
+                            selectedCountry.departments.find { it.name.equals(searchFilter.department, ignoreCase = true) }?.cities
+                                ?: selectedCountry.allCities
                         } else {
                             selectedCountry.allCities
                         }
@@ -257,7 +266,7 @@ fun SearchScreen(
                             onDismissRequest = { cityMenuExpanded = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text("Toutes les villes") },
+                                text = { Text("Toutes les villes", color = ProxiTextPrimary) },
                                 onClick = {
                                     viewModel.updateSearchLocation(selectedCountry.code, searchFilter.department, "", searchFilter.neighborhood)
                                     cityMenuExpanded = false
@@ -265,7 +274,7 @@ fun SearchScreen(
                             )
                             availableCities.forEach { city ->
                                 DropdownMenuItem(
-                                    text = { Text(city) },
+                                    text = { Text(city, color = ProxiTextPrimary) },
                                     onClick = {
                                         viewModel.setCity(city)
                                         cityMenuExpanded = false
@@ -275,15 +284,31 @@ fun SearchScreen(
                         }
                     }
 
-                    // Quartier filter
                     OutlinedTextField(
                         value = searchFilter.neighborhood,
-                        onValueChange = { viewModel.updateSearchLocation(searchFilter.countryCode, searchFilter.department, searchFilter.city, it) },
-                        placeholder = { Text("Quartier (ex: Cadjehoun)") },
+                        onValueChange = {
+                            viewModel.updateSearchLocation(
+                                searchFilter.countryCode,
+                                searchFilter.department,
+                                searchFilter.city,
+                                it
+                            )
+                        },
+                        placeholder = {
+                            Text(
+                                text = "Quartier (ex: Cadjehoun)",
+                                color = ProxiTextSecondary,
+                                fontSize = 13.sp
+                            )
+                        },
                         modifier = Modifier.weight(1.2f),
                         singleLine = true,
                         shape = RoundedCornerShape(8.dp),
                         colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = ProxiTextPrimary,
+                            unfocusedTextColor = ProxiTextPrimary,
+                            focusedPlaceholderColor = ProxiTextSecondary,
+                            unfocusedPlaceholderColor = ProxiTextSecondary,
                             focusedBorderColor = ProxiGreen,
                             unfocusedBorderColor = ProxiBorder
                         )
@@ -292,7 +317,6 @@ fun SearchScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Category chips scroll
                 LazyRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -301,10 +325,17 @@ fun SearchScreen(
                         FilterChip(
                             selected = searchFilter.categoryId.isEmpty(),
                             onClick = { viewModel.updateSearchCategory("") },
-                            label = { Text("Toutes catégories") },
+                            label = {
+                                Text(
+                                    "Toutes catégories",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = ProxiDarkBlue,
-                                selectedLabelColor = Color.White
+                                selectedLabelColor = Color.White,
+                                labelColor = ProxiTextPrimary
                             )
                         )
                     }
@@ -319,10 +350,17 @@ fun SearchScreen(
                                     viewModel.updateSearchCategory(cat.id)
                                 }
                             },
-                            label = { Text(cat.name) },
+                            label = {
+                                Text(
+                                    text = cat.name,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = ProxiDarkBlue,
-                                selectedLabelColor = Color.White
+                                selectedLabelColor = Color.White,
+                                labelColor = ProxiTextPrimary
                             )
                         )
                     }
@@ -330,7 +368,6 @@ fun SearchScreen(
             }
         }
 
-        // --- Results Section ---
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -344,7 +381,7 @@ fun SearchScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "${searchResults.size} professionnel(s) trouvé(s)",
+                        text = "${searchResults.size} professionnel(s) validé(s)",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = ProxiTextPrimary
@@ -358,7 +395,7 @@ fun SearchScreen(
                                 viewModel.updateSearchLocation(searchFilter.countryCode, "", "", "")
                             }
                         ) {
-                            Text("Réinitialiser filtres", fontSize = 12.sp, color = ProxiDarkBlue)
+                            Text("Réinitialiser", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = ProxiDarkBlue)
                         }
                     }
                 }
@@ -379,7 +416,7 @@ fun SearchScreen(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = "Aucun professionnel ne correspond à ces critères.",
+                                text = "Aucun professionnel validé ne correspond à ces critères.",
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = ProxiTextPrimary,
@@ -387,22 +424,25 @@ fun SearchScreen(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "Conseils : vérifiez l'orthographe, effacez le filtre par quartier ou choisissez une autre ville dans le sélecteur.",
+                                text = "Conseils : vérifiez l'orthographe, effacez le filtre par quartier ou élargissez à toutes les villes du pays.",
                                 fontSize = 13.sp,
                                 color = ProxiTextSecondary,
                                 textAlign = TextAlign.Center,
-                                lineHeight = 18.sp
+                                lineHeight = 19.sp
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Button(
                                 onClick = {
                                     viewModel.updateSearchCategory("")
                                     viewModel.updateSearchQuery("")
-                                    viewModel.updateSearchLocation(searchFilter.countryCode, searchFilter.city, "")
+                                    viewModel.updateSearchLocation(searchFilter.countryCode, "", "", "")
                                 },
-                                colors = ButtonDefaults.buttonColors(containerColor = ProxiGreen)
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = ProxiGreen,
+                                    contentColor = Color.White
+                                )
                             ) {
-                                Text("Voir tous les pros de ${searchFilter.city}")
+                                Text("Voir tout le pays (${selectedCountry.name})", color = Color.White, fontWeight = FontWeight.Bold)
                             }
                         }
                     }

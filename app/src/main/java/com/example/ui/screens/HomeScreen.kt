@@ -1,7 +1,6 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,26 +11,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.BusinessCenter
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -40,7 +29,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -64,17 +52,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.local.CategoryEntity
-import com.example.data.local.SeedData
 import com.example.ui.components.CategoryIconHelper
 import com.example.ui.components.ProfileCard
 import com.example.ui.navigation.LegalType
 import com.example.ui.navigation.Screen
-import com.example.ui.theme.ProxiAmber
 import com.example.ui.theme.ProxiBackground
+import com.example.ui.theme.ProxiBorder
 import com.example.ui.theme.ProxiDarkBlue
 import com.example.ui.theme.ProxiDarkBlueVariant
 import com.example.ui.theme.ProxiGreen
+import com.example.ui.theme.ProxiGreenText
 import com.example.ui.theme.ProxiTextPrimary
 import com.example.ui.theme.ProxiTextSecondary
 import com.example.ui.viewmodel.ProxiAfrikViewModel
@@ -115,13 +102,12 @@ fun HomeScreen(
                     .padding(20.dp)
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    // African Market Badge
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .clip(RoundedCornerShape(20.dp))
-                            .background(Color.White.copy(alpha = 0.15f))
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                            .background(Color.White.copy(alpha = 0.16f))
+                            .padding(horizontal = 12.dp, vertical = 5.dp)
                     ) {
                         Box(
                             modifier = Modifier
@@ -133,7 +119,7 @@ fun HomeScreen(
                         Text(
                             text = "Réseau de prestataires en Afrique",
                             color = Color.White,
-                            fontSize = 12.sp,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.Medium
                         )
                     }
@@ -153,13 +139,13 @@ fun HomeScreen(
                     Text(
                         text = "Trouvez rapidement un artisan fiable, un technicien ou un prestataire dans votre quartier et contactez-le directement.",
                         fontSize = 14.sp,
-                        color = Color.White.copy(alpha = 0.85f),
+                        color = Color.White.copy(alpha = 0.92f),
                         lineHeight = 20.sp
                     )
 
                     Spacer(modifier = Modifier.height(18.dp))
 
-                    // Location pickers (Country, Department, City)
+                    // Location pickers
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -168,7 +154,6 @@ fun HomeScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            // Country Selector
                             Box(modifier = Modifier.weight(1f)) {
                                 Row(
                                     modifier = Modifier
@@ -176,17 +161,17 @@ fun HomeScreen(
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(Color.White)
                                         .clickable { countryMenuExpanded = true }
-                                        .padding(horizontal = 10.dp, vertical = 9.dp)
+                                        .padding(horizontal = 10.dp, vertical = 10.dp)
                                         .testTag("home_country_selector"),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Default.LocationOn, contentDescription = null, tint = ProxiGreen, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.LocationOn, contentDescription = null, tint = ProxiGreenText, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Column {
-                                        Text("Pays", fontSize = 9.sp, color = ProxiTextSecondary)
+                                        Text("Pays", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = ProxiTextSecondary)
                                         Text(
                                             selectedCountry.name,
-                                            fontSize = 12.sp,
+                                            fontSize = 14.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = ProxiTextPrimary,
                                             maxLines = 1,
@@ -200,7 +185,7 @@ fun HomeScreen(
                                 ) {
                                     viewModel.countries.forEach { country ->
                                         DropdownMenuItem(
-                                            text = { Text("${country.name} (${country.code})") },
+                                            text = { Text("${country.name} (${country.code})", color = ProxiTextPrimary) },
                                             onClick = {
                                                 viewModel.setCountry(country)
                                                 countryMenuExpanded = false
@@ -210,7 +195,6 @@ fun HomeScreen(
                                 }
                             }
 
-                            // Department Selector
                             Box(modifier = Modifier.weight(1.2f)) {
                                 Row(
                                     modifier = Modifier
@@ -218,15 +202,15 @@ fun HomeScreen(
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(Color.White)
                                         .clickable { departmentMenuExpanded = true }
-                                        .padding(horizontal = 10.dp, vertical = 9.dp)
+                                        .padding(horizontal = 10.dp, vertical = 10.dp)
                                         .testTag("home_dept_selector"),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Column {
-                                        Text("Département / Région", fontSize = 9.sp, color = ProxiTextSecondary)
+                                        Text("Département / Région", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = ProxiTextSecondary)
                                         Text(
                                             selectedDepartment.ifBlank { "Tous" },
-                                            fontSize = 12.sp,
+                                            fontSize = 14.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = ProxiDarkBlue,
                                             maxLines = 1,
@@ -239,7 +223,7 @@ fun HomeScreen(
                                     onDismissRequest = { departmentMenuExpanded = false }
                                 ) {
                                     DropdownMenuItem(
-                                        text = { Text("Tous les départements") },
+                                        text = { Text("Tous les départements", color = ProxiTextPrimary) },
                                         onClick = {
                                             viewModel.setDepartment("")
                                             departmentMenuExpanded = false
@@ -247,7 +231,7 @@ fun HomeScreen(
                                     )
                                     selectedCountry.departments.forEach { dept ->
                                         DropdownMenuItem(
-                                            text = { Text(dept.name) },
+                                            text = { Text(dept.name, color = ProxiTextPrimary) },
                                             onClick = {
                                                 viewModel.setDepartment(dept.name)
                                                 departmentMenuExpanded = false
@@ -258,7 +242,6 @@ fun HomeScreen(
                             }
                         }
 
-                        // City Selector
                         Box(modifier = Modifier.fillMaxWidth()) {
                             Row(
                                 modifier = Modifier
@@ -266,17 +249,17 @@ fun HomeScreen(
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(Color.White)
                                     .clickable { cityMenuExpanded = true }
-                                    .padding(horizontal = 10.dp, vertical = 9.dp)
+                                    .padding(horizontal = 12.dp, vertical = 10.dp)
                                     .testTag("home_city_selector"),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.LocationOn, contentDescription = null, tint = ProxiDarkBlue, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.LocationOn, contentDescription = null, tint = ProxiDarkBlue, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Column {
-                                    Text("Ville sélectionnée", fontSize = 9.sp, color = ProxiTextSecondary)
+                                    Text("Ville sélectionnée", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = ProxiTextSecondary)
                                     Text(
                                         selectedCity.ifBlank { "Toutes les villes" },
-                                        fontSize = 12.sp,
+                                        fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = ProxiTextPrimary,
                                         maxLines = 1,
@@ -285,14 +268,16 @@ fun HomeScreen(
                                 }
                             }
 
-                            val availableCities = selectedCountry.departments.find { it.name.equals(selectedDepartment, ignoreCase = true) }?.cities ?: selectedCountry.allCities
+                            val availableCities = selectedCountry.departments
+                                .find { it.name.equals(selectedDepartment, ignoreCase = true) }
+                                ?.cities ?: selectedCountry.allCities
 
                             DropdownMenu(
                                 expanded = cityMenuExpanded,
                                 onDismissRequest = { cityMenuExpanded = false }
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text("Toutes les villes") },
+                                    text = { Text("Toutes les villes", color = ProxiTextPrimary) },
                                     onClick = {
                                         viewModel.setCity("")
                                         cityMenuExpanded = false
@@ -300,7 +285,7 @@ fun HomeScreen(
                                 )
                                 availableCities.forEach { city ->
                                     DropdownMenuItem(
-                                        text = { Text(city) },
+                                        text = { Text(city, color = ProxiTextPrimary) },
                                         onClick = {
                                             viewModel.setCity(city)
                                             cityMenuExpanded = false
@@ -313,11 +298,16 @@ fun HomeScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Search input
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
-                        placeholder = { Text("Service, ville ou quartier (ex: Plomberie, Cadjehoun)") },
+                        placeholder = {
+                            Text(
+                                text = "Service, ville ou quartier (ex: Plomberie, Cadjehoun)",
+                                color = ProxiTextSecondary,
+                                fontSize = 14.sp
+                            )
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("home_search_input"),
@@ -325,6 +315,10 @@ fun HomeScreen(
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedContainerColor = Color.White,
                             unfocusedContainerColor = Color.White,
+                            focusedTextColor = ProxiTextPrimary,
+                            unfocusedTextColor = ProxiTextPrimary,
+                            focusedPlaceholderColor = ProxiTextSecondary,
+                            unfocusedPlaceholderColor = ProxiTextSecondary,
                             focusedBorderColor = ProxiGreen,
                             unfocusedBorderColor = Color.Transparent
                         ),
@@ -336,7 +330,6 @@ fun HomeScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // 2 Main action buttons
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -345,16 +338,26 @@ fun HomeScreen(
                             onClick = {
                                 viewModel.updateSearchLocation(selectedCountry.code, selectedDepartment, selectedCity)
                                 viewModel.updateSearchQuery(searchQuery)
-                                viewModel.navigateTo(Screen.Search(countryCode = selectedCountry.code, department = selectedDepartment, city = selectedCity, query = searchQuery))
+                                viewModel.navigateTo(
+                                    Screen.Search(
+                                        countryCode = selectedCountry.code,
+                                        department = selectedDepartment,
+                                        city = selectedCity,
+                                        query = searchQuery
+                                    )
+                                )
                             },
                             modifier = Modifier
-                                .weight(1.2f)
+                                .weight(1.1f)
                                 .height(48.dp)
                                 .testTag("home_find_pro_button"),
-                            colors = ButtonDefaults.buttonColors(containerColor = ProxiGreen),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = ProxiGreen,
+                                contentColor = Color.White
+                            ),
                             shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text("Trouver un pro", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text("Trouver un pro", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
                         }
 
                         OutlinedButton(
@@ -365,16 +368,22 @@ fun HomeScreen(
                                 .testTag("home_register_pro_button"),
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)
+                            border = androidx.compose.foundation.BorderStroke(1.5.dp, Color.White)
                         ) {
-                            Text("Inscrire mon activité", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = "Inscrire mon activité",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                maxLines = 1
+                            )
                         }
                     }
                 }
             }
         }
 
-        // --- 2. CATEGORIES SECTION ---
+        // --- 2. CATEGORIES SECTION (2-column spacious cards, zero label truncation) ---
         item {
             Column(
                 modifier = Modifier
@@ -386,7 +395,7 @@ fun HomeScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Catégories de services",
                             fontSize = 18.sp,
@@ -395,7 +404,7 @@ fun HomeScreen(
                         )
                         Text(
                             text = "Sélectionnez un métier pour voir les artisans",
-                            fontSize = 12.sp,
+                            fontSize = 13.sp,
                             color = ProxiTextSecondary
                         )
                     }
@@ -403,30 +412,36 @@ fun HomeScreen(
                     TextButton(
                         onClick = {
                             viewModel.updateSearchLocation(selectedCountry.code, selectedDepartment, selectedCity)
-                            viewModel.navigateTo(Screen.Search(countryCode = selectedCountry.code, department = selectedDepartment, city = selectedCity))
+                            viewModel.navigateTo(
+                                Screen.Search(
+                                    countryCode = selectedCountry.code,
+                                    department = selectedDepartment,
+                                    city = selectedCity
+                                )
+                            )
                         }
                     ) {
-                        Text("Voir tout", color = ProxiDarkBlue, fontWeight = FontWeight.SemiBold)
+                        Text("Voir tout", color = ProxiDarkBlue, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Grid of top categories
                 val displayCats = categories.take(8)
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    displayCats.chunked(4).forEach { rowCats ->
+                    displayCats.chunked(2).forEach { rowCats ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             rowCats.forEach { cat ->
                                 Card(
                                     modifier = Modifier
                                         .weight(1f)
+                                        .heightIn(min = 68.dp)
                                         .testTag("cat_card_${cat.id}")
                                         .clickable {
                                             viewModel.updateSearchCategory(cat.id)
@@ -444,17 +459,17 @@ fun HomeScreen(
                                     colors = CardDefaults.cardColors(containerColor = Color.White),
                                     elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                                 ) {
-                                    Column(
+                                    Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(vertical = 12.dp, horizontal = 4.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally
+                                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Box(
                                             modifier = Modifier
                                                 .size(40.dp)
                                                 .clip(CircleShape)
-                                                .background(ProxiDarkBlue.copy(alpha = 0.08f)),
+                                                .background(ProxiDarkBlue.copy(alpha = 0.09f)),
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Icon(
@@ -464,21 +479,19 @@ fun HomeScreen(
                                                 modifier = Modifier.size(22.dp)
                                             )
                                         }
-                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Spacer(modifier = Modifier.width(10.dp))
                                         Text(
                                             text = cat.name,
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Medium,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.SemiBold,
                                             color = ProxiTextPrimary,
-                                            textAlign = TextAlign.Center,
-                                            maxLines = 2,
-                                            overflow = TextOverflow.Ellipsis
+                                            lineHeight = 17.sp,
+                                            maxLines = 2
                                         )
                                     }
                                 }
                             }
-                            // Fill blank weights if chunk size < 4
-                            repeat(4 - rowCats.size) {
+                            if (rowCats.size == 1) {
                                 Spacer(modifier = Modifier.weight(1f))
                             }
                         }
@@ -499,16 +512,16 @@ fun HomeScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Professionnels à ${selectedCity}",
+                            text = if (selectedCity.isNotBlank()) "Professionnels à $selectedCity" else "Professionnels (${selectedCountry.name})",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = ProxiTextPrimary
                         )
                         Text(
-                            text = "Profils vérifiés et disponibles dans votre zone",
-                            fontSize = 12.sp,
+                            text = "Profils vérifiés et validés dans votre zone",
+                            fontSize = 13.sp,
                             color = ProxiTextSecondary
                         )
                     }
@@ -516,10 +529,16 @@ fun HomeScreen(
                     TextButton(
                         onClick = {
                             viewModel.updateSearchLocation(selectedCountry.code, selectedDepartment, selectedCity)
-                            viewModel.navigateTo(Screen.Search(countryCode = selectedCountry.code, department = selectedDepartment, city = selectedCity))
+                            viewModel.navigateTo(
+                                Screen.Search(
+                                    countryCode = selectedCountry.code,
+                                    department = selectedDepartment,
+                                    city = selectedCity
+                                )
+                            )
                         }
                     ) {
-                        Text("Recherche avancée", color = ProxiGreen, fontWeight = FontWeight.SemiBold)
+                        Text("Recherche", color = ProxiGreenText, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -527,8 +546,8 @@ fun HomeScreen(
 
                 val localPros = approvedProfiles.filter {
                     it.countryCode.equals(selectedCountry.code, ignoreCase = true) &&
-                    (selectedCity.isBlank() || it.city.equals(selectedCity, ignoreCase = true)) &&
-                    (selectedDepartment.isBlank() || it.department.equals(selectedDepartment, ignoreCase = true))
+                        (selectedCity.isBlank() || it.city.equals(selectedCity, ignoreCase = true)) &&
+                        (selectedDepartment.isBlank() || it.department.equals(selectedDepartment, ignoreCase = true))
                 }
 
                 if (localPros.isEmpty()) {
@@ -544,17 +563,21 @@ fun HomeScreen(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = "Aucun professionnel répertorié pour le moment à ${selectedCity}.",
+                                text = "Aucun professionnel validé pour le moment dans cette localité.",
                                 fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
                                 color = ProxiTextSecondary,
                                 textAlign = TextAlign.Center
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
                             Button(
                                 onClick = { viewModel.navigateTo(Screen.ProWizard) },
-                                colors = ButtonDefaults.buttonColors(containerColor = ProxiDarkBlue)
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = ProxiDarkBlue,
+                                    contentColor = Color.White
+                                )
                             ) {
-                                Text("Soyez le premier pro à vous inscrire !")
+                                Text("Inscrire mon activité", color = Color.White, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -595,35 +618,33 @@ fun HomeScreen(
                         fontWeight = FontWeight.Bold,
                         color = ProxiDarkBlue
                     )
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "Simple, rapide et sans inscription obligatoire pour les clients.",
-                        fontSize = 12.sp,
+                        text = "Simple, rapide et pensé pour un contact direct.",
+                        fontSize = 13.sp,
                         color = ProxiTextSecondary
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Step 1
                     StepItem(
                         stepNumber = "1",
-                        title = "Sélectionnez votre ville",
-                        description = "Choisissez votre pays et votre ville, puis tapez le service ou l'artisan recherché."
+                        title = "Sélectionnez votre zone",
+                        description = "Choisissez votre pays, département, ville ou quartier, puis tapez le service recherché."
                     )
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Step 2
                     StepItem(
                         stepNumber = "2",
-                        title = "Comparez les profils",
-                        description = "Consultez les prestations détaillées, les tarifs indicatifs et les zones d'intervention."
+                        title = "Consultez les profils validés",
+                        description = "Parcourez les photos de réalisations, les prestations, les tarifs indicatifs et les avis."
                     )
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Step 3
                     StepItem(
                         stepNumber = "3",
                         title = "Contactez directement",
-                        description = "Cliquez sur WhatsApp ou Téléphone pour échanger directement sans commission ni intermédiaire."
+                        description = "Appuyez sur WhatsApp ou Appeler pour échanger sans commission ni intermédiaire."
                     )
                 }
             }
@@ -649,18 +670,21 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = "Créez votre fiche d'activité sur ProxiAfrik, gagnez en visibilité dans votre quartier et recevez des appels de clients sérieux.",
-                        fontSize = 13.sp,
-                        color = Color.White.copy(alpha = 0.85f),
-                        lineHeight = 18.sp
+                        fontSize = 14.sp,
+                        color = Color.White.copy(alpha = 0.92f),
+                        lineHeight = 20.sp
                     )
                     Spacer(modifier = Modifier.height(14.dp))
                     Button(
                         onClick = { viewModel.navigateTo(Screen.ProWizard) },
-                        colors = ButtonDefaults.buttonColors(containerColor = ProxiGreen),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ProxiGreen,
+                            contentColor = Color.White
+                        ),
                         shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
                     ) {
-                        Text("Créer ma fiche professionnelle", fontWeight = FontWeight.Bold)
+                        Text("Créer ma fiche professionnelle", fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
             }
@@ -674,35 +698,39 @@ fun HomeScreen(
                     .padding(top = 28.dp, start = 16.dp, end = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                HorizontalDivider(color = Color(0xFFE2E8F0))
+                HorizontalDivider(color = ProxiBorder)
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
                     text = "ProxiAfrik © 2026 - Plateforme de mise en relation de services en Afrique",
-                    fontSize = 12.sp,
+                    fontSize = 13.sp,
                     color = ProxiTextSecondary,
                     textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(20.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = "Conditions d'utilisation",
-                        fontSize = 12.sp,
+                        fontSize = 13.sp,
                         color = ProxiDarkBlue,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.clickable { viewModel.navigateTo(Screen.Legal(LegalType.CGU)) }
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clickable { viewModel.navigateTo(Screen.Legal(LegalType.CGU)) }
+                            .padding(vertical = 6.dp)
                     )
                     Text(
                         text = "Politique de confidentialité",
-                        fontSize = 12.sp,
+                        fontSize = 13.sp,
                         color = ProxiDarkBlue,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.clickable { viewModel.navigateTo(Screen.Legal(LegalType.PRIVACY)) }
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clickable { viewModel.navigateTo(Screen.Legal(LegalType.PRIVACY)) }
+                            .padding(vertical = 6.dp)
                     )
                 }
 
@@ -710,8 +738,8 @@ fun HomeScreen(
 
                 Text(
                     text = "Les tarifs indiqués par les professionnels sont purement indicatifs.",
-                    fontSize = 11.sp,
-                    color = Color(0xFF94A3B8),
+                    fontSize = 12.sp,
+                    color = ProxiTextSecondary,
                     textAlign = TextAlign.Center
                 )
             }
@@ -747,16 +775,16 @@ private fun StepItem(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                fontSize = 14.sp,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 color = ProxiTextPrimary
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = description,
-                fontSize = 12.sp,
+                fontSize = 13.sp,
                 color = ProxiTextSecondary,
-                lineHeight = 16.sp
+                lineHeight = 18.sp
             )
         }
     }

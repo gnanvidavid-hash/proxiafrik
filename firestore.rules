@@ -1,0 +1,450 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: deny everything by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Global Hardened Primitives ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (request.auth.token.email == 'gnanvidavid@gmail.com' && request.auth.token.email_verified == true)
+      );
+    }
+
+    function isValidTimestamp(val) {
+      return val is timestamp && val <= request.time;
+    }
+
+    // --- Entity Validation Helpers ---
+
+    function isValidUser(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.fullName is string && data.fullName.size() >= 1 && data.fullName.size() <= 100 &&
+             data.email is string && data.email.size() <= 150 &&
+             (!('phone' in data) || (data.phone is string && data.phone.size() <= 30)) &&
+             data.role is string && (data.role in ['client', 'pro', 'admin']) &&
+             data.accountStatus is string && (data.accountStatus in ['ACTIVE', 'SUSPENDED']) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidCategory(data) {
+      return data.name is string && data.name.size() >= 2 && data.name.size() <= 80 &&
+             data.slug is string && data.slug.size() >= 2 && data.slug.size() <= 80 &&
+             data.description is string && data.description.size() <= 300 &&
+             data.iconKey is string && data.iconKey.size() >= 1 && data.iconKey.size() <= 40 &&
+             data.isActive is bool &&
+             data.sortOrder is int && data.sortOrder >= 0 && data.sortOrder <= 1000 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidProfessionalProfile(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             (!('ownerName' in data) || (data.ownerName is string && data.ownerName.size() <= 100)) &&
+             data.businessName is string && data.businessName.size() >= 2 && data.businessName.size() <= 120 &&
+             data.slug is string && data.slug.size() >= 1 && data.slug.size() <= 140 &&
+             data.description is string && data.description.size() >= 10 && data.description.size() <= 2000 &&
+             data.countryCode is string && data.countryCode.size() >= 2 && data.countryCode.size() <= 5 &&
+             data.countryName is string && data.countryName.size() >= 2 && data.countryName.size() <= 80 &&
+             (!('department' in data) || (data.department is string && data.department.size() <= 80)) &&
+             data.city is string && data.city.size() >= 2 && data.city.size() <= 80 &&
+             data.neighborhood is string && data.neighborhood.size() >= 1 && data.neighborhood.size() <= 100 &&
+             (!('interventionZones' in data) || (data.interventionZones is string && data.interventionZones.size() <= 300)) &&
+             data.phonePublic is string && data.phonePublic.size() >= 6 && data.phonePublic.size() <= 30 &&
+             data.whatsappNumber is string && data.whatsappNumber.size() >= 6 && data.whatsappNumber.size() <= 30 &&
+             (!('profileImage' in data) || (data.profileImage is string && data.profileImage.size() <= 350000)) &&
+             data.primaryCategoryId is string && data.primaryCategoryId.size() >= 1 && data.primaryCategoryId.size() <= 64 &&
+             data.verificationStatus is string && (data.verificationStatus in ['PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED']) &&
+             (!('rejectionReason' in data) || (data.rejectionReason is string && data.rejectionReason.size() <= 300)) &&
+             data.publicationStatus is string && (data.publicationStatus in ['PUBLISHED', 'DRAFT', 'ARCHIVED']) &&
+             (!('openingHours' in data) || (data.openingHours is string && data.openingHours.size() <= 120)) &&
+             data.consentGiven is bool &&
+             data.viewsCount is int && data.viewsCount >= 0 &&
+             data.whatsappClicksCount is int && data.whatsappClicksCount >= 0 &&
+             data.phoneClicksCount is int && data.phoneClicksCount >= 0 &&
+             data.isSponsored is bool &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidService(data) {
+      return data.professionalId is string && data.professionalId.size() >= 1 && data.professionalId.size() <= 128 &&
+             data.ownerUserId is string && data.ownerUserId.size() >= 1 && data.ownerUserId.size() <= 128 &&
+             data.categoryId is string && data.categoryId.size() >= 1 && data.categoryId.size() <= 64 &&
+             data.title is string && data.title.size() >= 2 && data.title.size() <= 120 &&
+             data.description is string && data.description.size() <= 500 &&
+             data.indicativePrice is number && data.indicativePrice >= 0 &&
+             data.currencyCode is string && data.currencyCode.size() >= 1 && data.currencyCode.size() <= 10 &&
+             data.pricingType is string && (data.pricingType in ['SUR_DEVIS', 'FIXED', 'STARTING_AT']) &&
+             data.isActive is bool &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidPortfolioPhoto(data) {
+      return data.professionalId is string && data.professionalId.size() >= 1 && data.professionalId.size() <= 128 &&
+             data.ownerUserId is string && data.ownerUserId.size() >= 1 && data.ownerUserId.size() <= 128 &&
+             data.imageUrl is string && data.imageUrl.size() >= 1 && data.imageUrl.size() <= 350000 &&
+             data.caption is string && data.caption.size() <= 200 &&
+             data.visible is bool &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    function isValidReview(data) {
+      return data.professionalId is string && data.professionalId.size() >= 1 && data.professionalId.size() <= 128 &&
+             data.authorUserId is string && data.authorUserId.size() >= 1 && data.authorUserId.size() <= 128 &&
+             data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 80 &&
+             data.rating is int && data.rating >= 1 && data.rating <= 5 &&
+             data.comment is string && data.comment.size() >= 2 && data.comment.size() <= 1000 &&
+             data.moderationStatus is string && (data.moderationStatus in ['APPROVED', 'PENDING', 'REJECTED']) &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    function isValidReport(data) {
+      return data.reporterUserId is string && data.reporterUserId.size() >= 1 && data.reporterUserId.size() <= 128 &&
+             data.reporterName is string && data.reporterName.size() >= 1 && data.reporterName.size() <= 100 &&
+             data.reportedProfileId is string && data.reportedProfileId.size() >= 1 && data.reportedProfileId.size() <= 128 &&
+             data.reason is string && data.reason.size() >= 2 && data.reason.size() <= 120 &&
+             data.description is string && data.description.size() <= 1000 &&
+             data.status is string && (data.status in ['PENDING', 'RESOLVED', 'DISMISSED', 'SUSPENDED']) &&
+             (!('reviewedBy' in data) || (data.reviewedBy is string && data.reviewedBy.size() <= 128)) &&
+             (!('reviewedAt' in data) || isValidTimestamp(data.reviewedAt)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidAuditLog(data) {
+      return data.adminUserId is string && data.adminUserId.size() >= 1 && data.adminUserId.size() <= 128 &&
+             data.action is string && data.action.size() >= 2 && data.action.size() <= 60 &&
+             data.targetType is string && data.targetType.size() >= 2 && data.targetType.size() <= 60 &&
+             data.targetId is string && data.targetId.size() >= 1 && data.targetId.size() <= 128 &&
+             data.details is string && data.details.size() <= 500 &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    // --- Collection Rules ---
+
+    // 1. Users & Roles (PII isolated, self-promotion to admin blocked)
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll(['userId', 'fullName', 'email', 'role', 'accountStatus', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'fullName', 'email', 'phone', 'role', 'accountStatus', 'createdAt', 'updatedAt']) &&
+                       isValidUser(incoming()) &&
+                       (incoming().role in ['client', 'pro'] || isAdmin()) &&
+                       incoming().accountStatus == 'ACTIVE';
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidUser(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       (
+                         isAdmin() ||
+                         (
+                           request.auth.uid == userId &&
+                           (incoming().role in ['client', 'pro']) &&
+                           incoming().accountStatus == existing().accountStatus &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'phone', 'role', 'updatedAt'])
+                         )
+                       );
+
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    // 2. Trusted Admin Registry (client writes completely disabled)
+    match /admins/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow write: if false;
+    }
+
+    // 3. Categories (authenticated read, admin-only write)
+    match /categories/{categoryId} {
+      allow get: if isSignedIn() && isValidId(categoryId);
+      allow list: if isSignedIn();
+
+      allow create: if isAdmin() &&
+                       isValidId(categoryId) &&
+                       incoming().keys().hasAll(['name', 'slug', 'description', 'iconKey', 'isActive', 'sortOrder', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['name', 'slug', 'description', 'iconKey', 'isActive', 'sortOrder', 'createdAt', 'updatedAt']) &&
+                       isValidCategory(incoming());
+
+      allow update: if isAdmin() &&
+                       isValidId(categoryId) &&
+                       isValidCategory(incoming()) &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'slug', 'description', 'iconKey', 'isActive', 'sortOrder', 'updatedAt']);
+
+      allow delete: if isAdmin() && isValidId(categoryId);
+    }
+
+    // 4. Professional Profiles (public search restricted to APPROVED + PUBLISHED)
+    match /professionals/{profileId} {
+      allow get: if isSignedIn() && isValidId(profileId) && (
+        resource == null ||
+        (existing().verificationStatus == 'APPROVED' && existing().publicationStatus == 'PUBLISHED') ||
+        existing().userId == request.auth.uid ||
+        isAdmin()
+      );
+
+      allow list: if isSignedIn() && (
+        (existing().verificationStatus == 'APPROVED' && existing().publicationStatus == 'PUBLISHED') ||
+        existing().userId == request.auth.uid ||
+        isAdmin()
+      );
+
+      allow create: if isSignedIn() &&
+                       isValidId(profileId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().verificationStatus == 'PENDING' &&
+                       incoming().publicationStatus == 'PUBLISHED' &&
+                       incoming().consentGiven == true &&
+                       incoming().isSponsored == false &&
+                       incoming().viewsCount == 0 &&
+                       incoming().whatsappClicksCount == 0 &&
+                       incoming().phoneClicksCount == 0 &&
+                       incoming().keys().hasAll([
+                         'userId', 'businessName', 'slug', 'description', 'countryCode', 'countryName',
+                         'city', 'neighborhood', 'phonePublic', 'whatsappNumber', 'primaryCategoryId',
+                         'verificationStatus', 'publicationStatus', 'consentGiven',
+                         'viewsCount', 'whatsappClicksCount', 'phoneClicksCount', 'isSponsored',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'ownerName', 'businessName', 'slug', 'description',
+                         'countryCode', 'countryName', 'department', 'city', 'neighborhood',
+                         'interventionZones', 'phonePublic', 'whatsappNumber', 'profileImage',
+                         'primaryCategoryId', 'verificationStatus', 'rejectionReason',
+                         'publicationStatus', 'openingHours', 'consentGiven',
+                         'viewsCount', 'whatsappClicksCount', 'phoneClicksCount', 'isSponsored',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidProfessionalProfile(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(profileId) &&
+                       isValidProfessionalProfile(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       (
+                         // Tier 1: Admin moderation (approve, reject, suspend, sponsor)
+                         isAdmin() ||
+                         // Tier 2: Owner updates listing (stays/returns PENDING; cannot self-approve)
+                         (
+                           existing().userId == request.auth.uid &&
+                           existing().verificationStatus != 'SUSPENDED' &&
+                           incoming().verificationStatus == 'PENDING' &&
+                           incoming().isSponsored == existing().isSponsored &&
+                           incoming().viewsCount == existing().viewsCount &&
+                           incoming().whatsappClicksCount == existing().whatsappClicksCount &&
+                           incoming().phoneClicksCount == existing().phoneClicksCount &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'ownerName', 'businessName', 'slug', 'description',
+                             'countryCode', 'countryName', 'department', 'city', 'neighborhood',
+                             'interventionZones', 'phonePublic', 'whatsappNumber', 'profileImage',
+                             'primaryCategoryId', 'openingHours', 'publicationStatus',
+                             'verificationStatus', 'updatedAt'
+                           ])
+                         ) ||
+                         // Tier 3: Authenticated user increments engagement counter (+1 only) on approved listing
+                         (
+                           existing().verificationStatus == 'APPROVED' &&
+                           existing().publicationStatus == 'PUBLISHED' &&
+                           (
+                             (incoming().viewsCount == existing().viewsCount + 1 &&
+                              incoming().diff(existing()).affectedKeys().hasOnly(['viewsCount'])) ||
+                             (incoming().whatsappClicksCount == existing().whatsappClicksCount + 1 &&
+                              incoming().diff(existing()).affectedKeys().hasOnly(['whatsappClicksCount'])) ||
+                             (incoming().phoneClicksCount == existing().phoneClicksCount + 1 &&
+                              incoming().diff(existing()).affectedKeys().hasOnly(['phoneClicksCount']))
+                           )
+                         )
+                       );
+
+      allow delete: if isSignedIn() && isValidId(profileId) && (
+        existing().userId == request.auth.uid || isAdmin()
+      );
+
+      // 4a. Services Subcollection
+      match /services/{serviceId} {
+        allow get: if isSignedIn() && isValidId(profileId) && isValidId(serviceId) && (
+          resource == null ||
+          existing().isActive == true ||
+          existing().ownerUserId == request.auth.uid ||
+          isAdmin()
+        );
+        allow list: if isSignedIn() && (
+          existing().isActive == true ||
+          existing().ownerUserId == request.auth.uid ||
+          isAdmin()
+        );
+
+        allow create: if isSignedIn() &&
+                         isValidId(profileId) &&
+                         isValidId(serviceId) &&
+                         incoming().professionalId == profileId &&
+                         incoming().ownerUserId == request.auth.uid &&
+                         incoming().keys().hasAll(['professionalId', 'ownerUserId', 'categoryId', 'title', 'description', 'indicativePrice', 'currencyCode', 'pricingType', 'isActive', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['professionalId', 'ownerUserId', 'categoryId', 'title', 'description', 'indicativePrice', 'currencyCode', 'pricingType', 'isActive', 'createdAt', 'updatedAt']) &&
+                         isValidService(incoming()) &&
+                         exists(/databases/$(database)/documents/professionals/$(profileId)) &&
+                         get(/databases/$(database)/documents/professionals/$(profileId)).data.userId == request.auth.uid;
+
+        allow update: if isSignedIn() &&
+                         isValidId(profileId) &&
+                         isValidId(serviceId) &&
+                         isValidService(incoming()) &&
+                         incoming().professionalId == existing().professionalId &&
+                         incoming().ownerUserId == existing().ownerUserId &&
+                         incoming().createdAt == existing().createdAt &&
+                         (existing().ownerUserId == request.auth.uid || isAdmin()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['categoryId', 'title', 'description', 'indicativePrice', 'currencyCode', 'pricingType', 'isActive', 'updatedAt']);
+
+        allow delete: if isSignedIn() && isValidId(profileId) && isValidId(serviceId) && (
+          existing().ownerUserId == request.auth.uid || isAdmin()
+        );
+      }
+
+      // 4b. Portfolio Photos Subcollection
+      match /portfolio/{imageId} {
+        allow get: if isSignedIn() && isValidId(profileId) && isValidId(imageId) && (
+          resource == null ||
+          existing().visible == true ||
+          existing().ownerUserId == request.auth.uid ||
+          isAdmin()
+        );
+        allow list: if isSignedIn() && (
+          existing().visible == true ||
+          existing().ownerUserId == request.auth.uid ||
+          isAdmin()
+        );
+
+        allow create: if isSignedIn() &&
+                         isValidId(profileId) &&
+                         isValidId(imageId) &&
+                         incoming().professionalId == profileId &&
+                         incoming().ownerUserId == request.auth.uid &&
+                         incoming().visible == true &&
+                         incoming().keys().hasAll(['professionalId', 'ownerUserId', 'imageUrl', 'caption', 'visible', 'createdAt']) &&
+                         incoming().keys().hasOnly(['professionalId', 'ownerUserId', 'imageUrl', 'caption', 'visible', 'createdAt']) &&
+                         isValidPortfolioPhoto(incoming()) &&
+                         exists(/databases/$(database)/documents/professionals/$(profileId)) &&
+                         get(/databases/$(database)/documents/professionals/$(profileId)).data.userId == request.auth.uid;
+
+        allow update: if false;
+
+        allow delete: if isSignedIn() && isValidId(profileId) && isValidId(imageId) && (
+          existing().ownerUserId == request.auth.uid || isAdmin()
+        );
+      }
+
+      // 4c. Reviews Subcollection
+      match /reviews/{reviewId} {
+        allow get: if isSignedIn() && isValidId(profileId) && isValidId(reviewId) && (
+          resource == null ||
+          existing().moderationStatus == 'APPROVED' ||
+          existing().authorUserId == request.auth.uid ||
+          isAdmin()
+        );
+        allow list: if isSignedIn() && (
+          existing().moderationStatus == 'APPROVED' ||
+          existing().authorUserId == request.auth.uid ||
+          isAdmin()
+        );
+
+        allow create: if isSignedIn() &&
+                         isValidId(profileId) &&
+                         isValidId(reviewId) &&
+                         incoming().professionalId == profileId &&
+                         incoming().authorUserId == request.auth.uid &&
+                         incoming().moderationStatus == 'APPROVED' &&
+                         incoming().keys().hasAll(['professionalId', 'authorUserId', 'authorName', 'rating', 'comment', 'moderationStatus', 'createdAt']) &&
+                         incoming().keys().hasOnly(['professionalId', 'authorUserId', 'authorName', 'rating', 'comment', 'moderationStatus', 'createdAt']) &&
+                         isValidReview(incoming()) &&
+                         exists(/databases/$(database)/documents/professionals/$(profileId)) &&
+                         get(/databases/$(database)/documents/professionals/$(profileId)).data.verificationStatus == 'APPROVED';
+
+        allow update: if isAdmin() &&
+                         isValidId(profileId) &&
+                         isValidId(reviewId) &&
+                         isValidReview(incoming()) &&
+                         incoming().professionalId == existing().professionalId &&
+                         incoming().authorUserId == existing().authorUserId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['moderationStatus']);
+
+        allow delete: if isAdmin() && isValidId(profileId) && isValidId(reviewId);
+      }
+    }
+
+    // 5. Reports (authenticated create, reporter reads own, admin reads/moderates all)
+    match /reports/{reportId} {
+      allow get: if isSignedIn() && isValidId(reportId) && (
+        resource == null || existing().reporterUserId == request.auth.uid || isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        existing().reporterUserId == request.auth.uid || isAdmin()
+      );
+
+      allow create: if isSignedIn() &&
+                       isValidId(reportId) &&
+                       incoming().reporterUserId == request.auth.uid &&
+                       incoming().status == 'PENDING' &&
+                       incoming().keys().hasAll(['reporterUserId', 'reporterName', 'reportedProfileId', 'reason', 'description', 'status', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['reporterUserId', 'reporterName', 'reportedProfileId', 'reason', 'description', 'status', 'createdAt', 'updatedAt']) &&
+                       isValidReport(incoming()) &&
+                       exists(/databases/$(database)/documents/professionals/$(incoming().reportedProfileId));
+
+      allow update: if isAdmin() &&
+                       isValidId(reportId) &&
+                       isValidReport(incoming()) &&
+                       incoming().reporterUserId == existing().reporterUserId &&
+                       incoming().reportedProfileId == existing().reportedProfileId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['status', 'reviewedBy', 'reviewedAt', 'updatedAt']);
+
+      allow delete: if isAdmin() && isValidId(reportId);
+    }
+
+    // 6. Admin Audit Logs (immutable, admin-only)
+    match /audit_logs/{logId} {
+      allow get, list: if isAdmin();
+
+      allow create: if isAdmin() &&
+                       isValidId(logId) &&
+                       incoming().adminUserId == request.auth.uid &&
+                       incoming().keys().hasAll(['adminUserId', 'action', 'targetType', 'targetId', 'details', 'createdAt']) &&
+                       incoming().keys().hasOnly(['adminUserId', 'action', 'targetType', 'targetId', 'details', 'createdAt']) &&
+                       isValidAuditLog(incoming());
+
+      allow update, delete: if false;
+    }
+  }
+}

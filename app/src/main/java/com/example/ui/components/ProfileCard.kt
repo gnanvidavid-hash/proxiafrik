@@ -6,8 +6,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -19,15 +21,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Verified
-import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,24 +33,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.local.CategoryEntity
-import com.example.data.local.ProfessionalProfileEntity
+import com.example.data.model.CategoryItem
+import com.example.data.model.ProfessionalProfile
 import com.example.ui.theme.ProxiBorder
 import com.example.ui.theme.ProxiDarkBlue
 import com.example.ui.theme.ProxiGreen
-import com.example.ui.theme.ProxiGreenLight
+import com.example.ui.theme.ProxiGreenText
 import com.example.ui.theme.ProxiTextPrimary
 import com.example.ui.theme.ProxiTextSecondary
 
 @Composable
 fun ProfileCard(
-    profile: ProfessionalProfileEntity,
-    category: CategoryEntity?,
+    profile: ProfessionalProfile,
+    category: CategoryItem?,
     onViewProfile: () -> Unit,
     onContactWhatsApp: () -> Unit,
     onContactPhone: () -> Unit,
@@ -72,24 +71,31 @@ fun ProfileCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // Header Row: Avatar initial, Name, Badges
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(52.dp)
                         .clip(CircleShape)
                         .background(ProxiDarkBlue),
                     contentAlignment = Alignment.Center
                 ) {
-                    val initial = profile.businessName.firstOrNull()?.uppercase() ?: "P"
-                    Text(
-                        text = initial,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
+                    ProxiPhoto(
+                        imageUrl = profile.profileImage,
+                        contentDescription = profile.businessName,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                        fallbackContent = {
+                            val initial = profile.businessName.firstOrNull()?.uppercase() ?: "P"
+                            Text(
+                                text = initial,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
                     )
                 }
 
@@ -110,7 +116,6 @@ fun ProfileCard(
                             modifier = Modifier.weight(1f, fill = false)
                         )
 
-                        // Real verification badge - only if admin approved!
                         if (profile.verificationStatus == "APPROVED") {
                             Icon(
                                 imageVector = Icons.Default.CheckCircle,
@@ -121,11 +126,10 @@ fun ProfileCard(
                         }
                     }
 
-                    // Category tag
                     Text(
                         text = category?.name ?: "Service professionnel",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
                         color = ProxiDarkBlue
                     )
                 }
@@ -135,14 +139,14 @@ fun ProfileCard(
                         modifier = Modifier
                             .clip(RoundedCornerShape(4.dp))
                             .background(Color(0xFFFEF3C7))
-                            .border(1.dp, Color(0xFFF59E0B), RoundedCornerShape(4.dp))
+                            .border(1.dp, Color(0xFFD97706), RoundedCornerShape(4.dp))
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
                         Text(
                             text = "Sponsorisé",
-                            fontSize = 10.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF92400E)
+                            color = Color(0xFF78350F)
                         )
                     }
                 }
@@ -150,7 +154,6 @@ fun ProfileCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Location
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
@@ -158,7 +161,7 @@ fun ProfileCard(
                 Icon(
                     imageVector = Icons.Default.LocationOn,
                     contentDescription = null,
-                    tint = Color(0xFF64748B),
+                    tint = ProxiTextSecondary,
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
@@ -168,34 +171,34 @@ fun ProfileCard(
                         append(" (").append(profile.neighborhood).append(")")
                     }
                     if (profile.department.isNotBlank()) {
-                        append(" • Dép. ").append(profile.department)
+                        append(" • ").append(profile.department)
                     }
                     append(", ").append(profile.countryName)
                 }
                 Text(
                     text = locText,
                     fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
                     color = ProxiTextSecondary
                 )
             }
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // Description
             Text(
                 text = profile.description,
-                fontSize = 13.sp,
-                color = ProxiTextPrimary.copy(alpha = 0.85f),
+                fontSize = 14.sp,
+                color = ProxiTextPrimary,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                lineHeight = 18.sp
+                lineHeight = 20.sp
             )
 
             if (profile.interventionZones.isNotBlank()) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = "Zone : ${profile.interventionZones}",
-                    fontSize = 12.sp,
+                    fontSize = 13.sp,
                     color = ProxiTextSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -204,7 +207,6 @@ fun ProfileCard(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Action Buttons: Voir Profil, WhatsApp, Appeler
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -214,40 +216,50 @@ fun ProfileCard(
                     onClick = onViewProfile,
                     modifier = Modifier
                         .weight(1.1f)
-                        .height(44.dp)
+                        .height(48.dp)
                         .testTag("view_profile_btn_${profile.id}"),
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, ProxiDarkBlue)
                 ) {
-                    Text("Voir le profil", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = "Voir le profil",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = ProxiDarkBlue
+                    )
                 }
 
-                // WhatsApp Contact
                 Button(
                     onClick = onContactWhatsApp,
                     modifier = Modifier
                         .weight(1f)
-                        .height(44.dp)
+                        .height(48.dp)
                         .testTag("whatsapp_btn_${profile.id}"),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366)),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ProxiGreenText,
+                        contentColor = Color.White
+                    ),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text(
                         text = "WhatsApp",
-                        fontSize = 12.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
                 }
 
-                // Phone Call
                 Button(
                     onClick = onContactPhone,
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(48.dp)
                         .testTag("call_btn_${profile.id}"),
-                    colors = ButtonDefaults.buttonColors(containerColor = ProxiGreen),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ProxiDarkBlue,
+                        contentColor = Color.White
+                    ),
                     shape = RoundedCornerShape(8.dp),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+                    contentPadding = PaddingValues(0.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Call,

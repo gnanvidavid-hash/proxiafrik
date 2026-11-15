@@ -1,35 +1,42 @@
 package com.example.ui.viewmodel
 
-import android.app.Application
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import android.widget.Toast
-import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.example.data.local.AdminAuditLogEntity
-import com.example.data.local.AppDatabase
-import com.example.data.local.CategoryEntity
-import com.example.data.local.PortfolioImageEntity
-import com.example.data.local.ProfessionalProfileEntity
-import com.example.data.local.ReportEntity
-import com.example.data.local.ReviewEntity
-import com.example.data.local.SeedData
-import com.example.data.local.ServiceEntity
-import com.example.data.local.SubscriptionEntity
-import com.example.data.local.UserEntity
-import com.example.data.repository.ProxiAfrikRepository
-import com.example.ui.navigation.LegalType
+import com.example.data.model.AdminAuditLogRecord
+import com.example.data.model.CategoryItem
+import com.example.data.model.GeoCatalog
+import com.example.data.model.PortfolioPhoto
+import com.example.data.model.ProfessionalProfile
+import com.example.data.model.ReportRecord
+import com.example.data.model.ReviewItem
+import com.example.data.model.ServiceItem
+import com.example.data.model.UserAccount
+import com.example.data.repository.FirestoreProxiRepository
 import com.example.ui.navigation.Screen
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
+import com.google.firebase.firestore.FirebaseFirestoreException
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -44,39 +51,47 @@ data class SearchFilter(
 )
 
 data class WizardDraft(
-    val id: String = "pro_" + UUID.randomUUID().toString().take(8),
+    val id: String = "pro_" + UUID.randomUUID().toString().replace("-", "").take(12),
     val businessName: String = "",
     val primaryCategoryId: String = "cat_plumbing",
     val description: String = "",
     val ownerName: String = "",
+    val profileImage: String = "",
     val countryCode: String = "BJ",
     val countryName: String = "Bénin",
     val department: String = "Littoral",
     val city: String = "Cotonou",
     val neighborhood: String = "",
     val interventionZones: String = "",
-    val services: List<ServiceEntity> = emptyList(),
+    val services: List<ServiceItem> = emptyList(),
     val phonePublic: String = "",
     val whatsappNumber: String = "",
     val openingHours: String = "Lun - Sam : 08h00 - 18h30",
     val consentGiven: Boolean = false,
-    val profileImage: String = "",
-    val portfolioCaptions: List<Pair<String, String>> = emptyList(),
+    val portfolioPhotos: List<Pair<String, String>> = emptyList(),
     val currentStep: Int = 1
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ProxiAfrikViewModel(
-    application: Application,
-    private val repository: ProxiAfrikRepository
-) : AndroidViewModel(application) {
+    private val repository: FirestoreProxiRepository,
+    private val currentUserId: String
+) : ViewModel() {
+
+    private val _uiMessages = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    val uiMessages: SharedFlow<String> = _uiMessages.asSharedFlow()
 
     // --- Navigation Stack ---
     private val _navigationStack = MutableStateFlow<List<Screen>>(listOf(Screen.Home))
     val currentScreen: StateFlow<Screen> = _navigationStack
-        .combine(flowOf(Unit)) { stack, _ -> stack.lastOrNull() ?: Screen.Home }
+        .map { stack -> stack.lastOrNull() ?: Screen.Home }
         .stateIn(viewModelScope, SharingStarted.Eagerly, Screen.Home)
 
     fun navigateTo(screen: Screen) {
+        if (screen is Screen.AdminDashboard && !isAdmin.value) {
+            _uiMessages.tryEmit("Accès réservé aux administrateurs.")
+            return
+        }
         _navigationStack.value = _navigationStack.value + screen
     }
 
@@ -92,48 +107,49 @@ class ProxiAfrikViewModel(
         _navigationStack.value = listOf(Screen.Home)
     }
 
-    // --- Auth & User State ---
-    val currentUser: StateFlow<UserEntity?> = repository.currentUser
-
-    fun login(email: String, roleHint: String? = null) {
+    // --- User & Role (from Firestore DB) ---
+    init {
         viewModelScope.launch {
-            repository.login(email, roleHint)
+            val firebaseUser = Firebase.auth.currentUser
+            if (firebaseUser != null && firebaseUser.uid == currentUserId) {
+                repository.ensureUserAccount(firebaseUser)
+            }
         }
     }
 
-    fun register(fullName: String, email: String, phone: String, role: String) {
-        viewModelScope.launch {
-            repository.register(fullName, email, phone, role)
-        }
-    }
+    val currentUser: StateFlow<UserAccount?> = repository.observeUserAccount(currentUserId)
+        .safeFallback(null, "observeUserAccount")
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
 
-    fun logout() {
-        repository.logout()
-        navigateHome()
-    }
+    val isAdmin: StateFlow<Boolean> = combine(
+        repository.observeIsAdmin(currentUserId).safeFallback(false, "observeIsAdmin"),
+        currentUser
+    ) { adminDocOrEmail, account ->
+        adminDocOrEmail || account?.role == "admin"
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), repository.isBootstrappedAdmin())
 
-    // Switch quick demo role (Client, Pro, Admin)
-    fun switchDemoUser(role: String) {
+    fun updateUserRole(newRole: String) {
         viewModelScope.launch {
-            when (role) {
-                "ADMIN" -> repository.login("admin@proxiafrik.com", "ADMIN")
-                "PROFESSIONAL" -> repository.login("pro@proxiafrik.com", "PROFESSIONAL")
-                else -> repository.login("client@proxiafrik.com", "CLIENT")
+            val result = repository.updateOwnRole(newRole)
+            if (result.isFailure) {
+                _uiMessages.tryEmit("Impossible de modifier le rôle : action non autorisée.")
             }
         }
     }
 
     // --- Categories & Geography ---
-    val activeCategories: StateFlow<List<CategoryEntity>> = repository.activeCategoriesFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val allCategories: StateFlow<List<CategoryItem>> = repository.observeCategories()
+        .safeFallback(GeoCatalog.defaultCategories, "observeCategories")
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), GeoCatalog.defaultCategories)
 
-    val allCategories: StateFlow<List<CategoryEntity>> = repository.allCategoriesFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val activeCategories: StateFlow<List<CategoryItem>> = allCategories
+        .map { list -> list.filter { it.isActive } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), GeoCatalog.defaultCategories)
 
-    val countries = SeedData.supportedCountries
+    val countries = GeoCatalog.supportedCountries
 
-    private val _selectedCountry = MutableStateFlow(SeedData.supportedCountries.first())
-    val selectedCountry: StateFlow<SeedData.CountryInfo> = _selectedCountry.asStateFlow()
+    private val _selectedCountry = MutableStateFlow(GeoCatalog.supportedCountries.first())
+    val selectedCountry: StateFlow<GeoCatalog.CountryInfo> = _selectedCountry.asStateFlow()
 
     private val _selectedDepartment = MutableStateFlow("Littoral")
     val selectedDepartment: StateFlow<String> = _selectedDepartment.asStateFlow()
@@ -141,7 +157,7 @@ class ProxiAfrikViewModel(
     private val _selectedCity = MutableStateFlow("Cotonou")
     val selectedCity: StateFlow<String> = _selectedCity.asStateFlow()
 
-    fun setCountry(country: SeedData.CountryInfo) {
+    fun setCountry(country: GeoCatalog.CountryInfo) {
         _selectedCountry.value = country
         val firstDept = country.departments.firstOrNull()
         _selectedDepartment.value = firstDept?.name ?: ""
@@ -176,7 +192,7 @@ class ProxiAfrikViewModel(
         )
     }
 
-    // --- Search Engine ---
+    // --- Real Search Engine (exclusively APPROVED + PUBLISHED profiles) ---
     private val _searchFilter = MutableStateFlow(SearchFilter())
     val searchFilter: StateFlow<SearchFilter> = _searchFilter.asStateFlow()
 
@@ -188,7 +204,12 @@ class ProxiAfrikViewModel(
         _searchFilter.value = _searchFilter.value.copy(categoryId = categoryId)
     }
 
-    fun updateSearchLocation(countryCode: String, department: String = "", city: String = "", neighborhood: String = "") {
+    fun updateSearchLocation(
+        countryCode: String,
+        department: String = "",
+        city: String = "",
+        neighborhood: String = ""
+    ) {
         _searchFilter.value = _searchFilter.value.copy(
             countryCode = countryCode,
             department = department,
@@ -197,64 +218,78 @@ class ProxiAfrikViewModel(
         )
     }
 
-    val searchResults: StateFlow<List<ProfessionalProfileEntity>> = _searchFilter
+    val searchResults: StateFlow<List<ProfessionalProfile>> = _searchFilter
         .flatMapLatest { filter ->
             repository.searchApprovedProfiles(
-                query = filter.query,
+                queryText = filter.query,
                 countryCode = filter.countryCode,
                 department = filter.department,
                 city = filter.city,
                 neighborhood = filter.neighborhood,
                 categoryId = filter.categoryId
-            )
+            ).safeFallback(emptyList(), "searchApprovedProfiles")
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    val approvedProfiles: StateFlow<List<ProfessionalProfileEntity>> = repository.approvedProfilesFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val approvedProfiles: StateFlow<List<ProfessionalProfile>> = repository.observeApprovedProfiles()
+        .safeFallback(emptyList(), "observeApprovedProfiles")
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
     // --- Profile Detail ---
     private val _selectedProfileId = MutableStateFlow<String?>(null)
-    val selectedProfile: StateFlow<ProfessionalProfileEntity?> = _selectedProfileId
-        .flatMapLatest { id ->
-            if (id == null) flowOf(null) else repository.getProfileByIdFlow(id)
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val selectedProfileServices: StateFlow<List<ServiceEntity>> = _selectedProfileId
+    val selectedProfile: StateFlow<ProfessionalProfile?> = _selectedProfileId
         .flatMapLatest { id ->
-            if (id == null) flowOf(emptyList()) else repository.getServicesForProfile(id)
+            if (id == null) flowOf(null)
+            else repository.observeProfileById(id).safeFallback(null, "observeProfileById")
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
 
-    val selectedProfilePortfolio: StateFlow<List<PortfolioImageEntity>> = _selectedProfileId
+    val selectedProfileServices: StateFlow<List<ServiceItem>> = _selectedProfileId
         .flatMapLatest { id ->
-            if (id == null) flowOf(emptyList()) else repository.getPortfolioForProfile(id)
+            if (id == null) flowOf(emptyList())
+            else repository.observeServicesForProfile(id).safeFallback(emptyList(), "observeServices")
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    val selectedProfileReviews: StateFlow<List<ReviewEntity>> = _selectedProfileId
+    val selectedProfilePortfolio: StateFlow<List<PortfolioPhoto>> = _selectedProfileId
         .flatMapLatest { id ->
-            if (id == null) flowOf(emptyList()) else repository.getApprovedReviews(id)
+            if (id == null) flowOf(emptyList())
+            else repository.observePortfolioForProfile(id).safeFallback(emptyList(), "observePortfolio")
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+
+    val selectedProfileReviews: StateFlow<List<ReviewItem>> = _selectedProfileId
+        .flatMapLatest { id ->
+            if (id == null) flowOf(emptyList())
+            else repository.observeApprovedReviews(id).safeFallback(emptyList(), "observeApprovedReviews")
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
     fun selectProfile(profileId: String) {
         _selectedProfileId.value = profileId
         viewModelScope.launch {
-            repository.recordProfileView(profileId)
+            val pro = approvedProfiles.value.find { it.id == profileId }
+            if (pro != null && pro.verificationStatus == "APPROVED") {
+                repository.incrementProfileCounter(profileId, "viewsCount")
+            }
         }
         navigateTo(Screen.ProfileDetail(profileId))
     }
 
-    // Contact actions with actual measurement and Android Intents
-    fun contactViaWhatsApp(context: Context, pro: ProfessionalProfileEntity) {
-        viewModelScope.launch {
-            repository.recordContactClick(pro.id, "WHATSAPP")
+    fun contactViaWhatsApp(context: Context, pro: ProfessionalProfile) {
+        if (pro.verificationStatus == "APPROVED") {
+            viewModelScope.launch {
+                repository.incrementProfileCounter(pro.id, "whatsappClicksCount")
+            }
         }
         try {
             val rawNumber = pro.whatsappNumber.replace("[^0-9]".toRegex(), "")
-            val defaultMsg = "Bonjour, j'ai découvert votre profil sur ProxiAfrik et je souhaite obtenir des informations sur vos services."
+            if (rawNumber.length < 6) {
+                Toast.makeText(context, "Numéro WhatsApp invalide.", Toast.LENGTH_SHORT).show()
+                return
+            }
+            val defaultMsg = "Bonjour ${pro.businessName}, j'ai découvert votre fiche sur ProxiAfrik et je souhaite obtenir des renseignements sur vos services."
             val url = "https://api.whatsapp.com/send?phone=$rawNumber&text=${Uri.encode(defaultMsg)}"
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -265,13 +300,20 @@ class ProxiAfrikViewModel(
         }
     }
 
-    fun contactViaPhone(context: Context, pro: ProfessionalProfileEntity) {
-        viewModelScope.launch {
-            repository.recordContactClick(pro.id, "PHONE")
+    fun contactViaPhone(context: Context, pro: ProfessionalProfile) {
+        if (pro.verificationStatus == "APPROVED") {
+            viewModelScope.launch {
+                repository.incrementProfileCounter(pro.id, "phoneClicksCount")
+            }
         }
         try {
+            val cleanTel = pro.phonePublic.trim()
+            if (cleanTel.isBlank()) {
+                Toast.makeText(context, "Numéro de téléphone manquant.", Toast.LENGTH_SHORT).show()
+                return
+            }
             val intent = Intent(Intent.ACTION_DIAL).apply {
-                data = Uri.parse("tel:${pro.phonePublic}")
+                data = Uri.parse("tel:$cleanTel")
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)
@@ -282,43 +324,36 @@ class ProxiAfrikViewModel(
 
     fun submitReport(profileId: String, reason: String, description: String) {
         viewModelScope.launch {
-            val user = currentUser.value
-            val report = ReportEntity(
-                id = "rep_" + UUID.randomUUID().toString().take(8),
-                reporterUserId = user?.id ?: "anonymous",
-                reporterName = user?.fullName ?: "Visiteur",
-                reportedProfileId = profileId,
-                reason = reason,
-                description = description
-            )
-            repository.submitReport(report)
+            val reporterName = currentUser.value?.fullName?.ifBlank { "Utilisateur" } ?: "Utilisateur"
+            val result = repository.submitReport(profileId, reason, description, reporterName)
+            if (result.isSuccess) {
+                _uiMessages.tryEmit("Signalement enregistré et transmis à l'administration.")
+            } else {
+                _uiMessages.tryEmit("Erreur lors de l'envoi du signalement.")
+            }
         }
     }
 
     fun submitReview(profileId: String, rating: Int, comment: String, customAuthorName: String = "") {
         viewModelScope.launch {
-            val user = currentUser.value
-            val author = when {
-                customAuthorName.isNotBlank() -> customAuthorName
-                user != null && user.fullName.isNotBlank() -> user.fullName
-                else -> "Client ProxiAfrik"
+            val author = customAuthorName.ifBlank {
+                currentUser.value?.fullName?.ifBlank { "Client ProxiAfrik" } ?: "Client ProxiAfrik"
             }
-            val review = ReviewEntity(
-                id = "rev_" + UUID.randomUUID().toString().take(8),
-                professionalId = profileId,
-                authorUserId = user?.id ?: "client_anon",
-                authorName = author,
-                rating = rating,
-                comment = comment,
-                moderationStatus = "APPROVED"
-            )
-            repository.submitReview(review)
+            val result = repository.submitReview(profileId, rating, comment, author)
+            if (result.isSuccess) {
+                _uiMessages.tryEmit("Votre avis a été publié. Merci !")
+            } else {
+                _uiMessages.tryEmit("Impossible de publier l'avis.")
+            }
         }
     }
 
-    // --- Professional Wizard (6-Step Registration) ---
+    // --- Professional Wizard ---
     private val _wizardDraft = MutableStateFlow(WizardDraft())
     val wizardDraft: StateFlow<WizardDraft> = _wizardDraft.asStateFlow()
+
+    private val _isSubmittingWizard = MutableStateFlow(false)
+    val isSubmittingWizard: StateFlow<Boolean> = _isSubmittingWizard.asStateFlow()
 
     fun updateWizardField(update: (WizardDraft) -> WizardDraft) {
         _wizardDraft.value = update(_wizardDraft.value)
@@ -336,212 +371,206 @@ class ProxiAfrikViewModel(
         }
     }
 
-    fun submitWizard() {
+    fun submitWizard(onSuccess: () -> Unit = {}) {
+        if (_isSubmittingWizard.value) return
         viewModelScope.launch {
-            val draft = _wizardDraft.value
-            val user = currentUser.value ?: return@launch
-            val profile = ProfessionalProfileEntity(
-                id = draft.id,
-                userId = user.id,
-                businessName = draft.businessName,
-                slug = draft.businessName.lowercase().replace(" ", "-"),
-                description = draft.description,
-                countryCode = draft.countryCode,
-                countryName = draft.countryName,
-                department = draft.department,
-                city = draft.city,
-                neighborhood = draft.neighborhood,
-                interventionZones = draft.interventionZones,
-                phonePublic = draft.phonePublic,
-                whatsappNumber = draft.whatsappNumber,
-                primaryCategoryId = draft.primaryCategoryId,
-                verificationStatus = "PENDING",
-                publicationStatus = "PUBLISHED",
-                openingHours = draft.openingHours,
-                viewsCount = 0
-            )
-            repository.submitProfile(profile)
-
-            // Save services
-            draft.services.forEach { srv ->
-                repository.addService(srv.copy(id = "srv_" + UUID.randomUUID().toString().take(8), professionalId = profile.id))
-            }
-
-            // Save portfolio captions
-            draft.portfolioCaptions.forEach { (imgUrl, caption) ->
-                repository.addPortfolioImage(
-                    PortfolioImageEntity(
-                        id = "img_" + UUID.randomUUID().toString().take(8),
-                        professionalId = profile.id,
-                        imageUrl = imgUrl,
-                        caption = caption
-                    )
+            _isSubmittingWizard.value = true
+            try {
+                val draft = _wizardDraft.value
+                val profile = ProfessionalProfile(
+                    id = draft.id,
+                    userId = currentUserId,
+                    ownerName = draft.ownerName.ifBlank { currentUser.value?.fullName ?: "" },
+                    businessName = draft.businessName.trim(),
+                    description = draft.description.trim(),
+                    countryCode = draft.countryCode,
+                    countryName = draft.countryName,
+                    department = draft.department,
+                    city = draft.city,
+                    neighborhood = draft.neighborhood.trim(),
+                    interventionZones = draft.interventionZones.trim(),
+                    phonePublic = draft.phonePublic.trim(),
+                    whatsappNumber = draft.whatsappNumber.trim(),
+                    profileImage = draft.profileImage,
+                    primaryCategoryId = draft.primaryCategoryId,
+                    verificationStatus = "PENDING",
+                    publicationStatus = "PUBLISHED",
+                    openingHours = draft.openingHours.trim(),
+                    consentGiven = draft.consentGiven
                 )
+                val photos = draft.portfolioPhotos.map { (dataUrl, caption) ->
+                    PortfolioPhoto(imageUrl = dataUrl, caption = caption)
+                }
+                val result = repository.submitProfile(profile, draft.services, photos)
+                if (result.isSuccess) {
+                    _wizardDraft.value = WizardDraft()
+                    _uiMessages.tryEmit("Profil enregistré en statut « En attente » de validation administrative.")
+                    onSuccess()
+                    navigateTo(Screen.ProDashboard)
+                } else {
+                    _uiMessages.tryEmit("Erreur : vérifiez que tous les champs obligatoires sont valides.")
+                }
+            } finally {
+                _isSubmittingWizard.value = false
             }
-
-            // Reset draft and navigate to Pro Dashboard
-            _wizardDraft.value = WizardDraft()
-            navigateTo(Screen.ProDashboard)
         }
     }
 
     // --- Pro Dashboard State ---
-    val currentProProfile: StateFlow<ProfessionalProfileEntity?> = currentUser
-        .flatMapLatest { user ->
-            if (user == null || user.role != "PROFESSIONAL") flowOf(null)
-            else repository.getProfileByUserIdFlow(user.id)
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val currentProProfile: StateFlow<ProfessionalProfile?> = repository.observeMyProfile()
+        .safeFallback(null, "observeMyProfile")
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
 
-    val currentProServices: StateFlow<List<ServiceEntity>> = currentProProfile
+    val currentProServices: StateFlow<List<ServiceItem>> = currentProProfile
         .flatMapLatest { pro ->
             if (pro == null) flowOf(emptyList())
-            else repository.getServicesForProfile(pro.id)
+            else repository.observeServicesForProfile(pro.id).safeFallback(emptyList(), "proServices")
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    val currentProPortfolio: StateFlow<List<PortfolioImageEntity>> = currentProProfile
+    val currentProPortfolio: StateFlow<List<PortfolioPhoto>> = currentProProfile
         .flatMapLatest { pro ->
             if (pro == null) flowOf(emptyList())
-            else repository.getPortfolioForProfile(pro.id)
+            else repository.observePortfolioForProfile(pro.id).safeFallback(emptyList(), "proPortfolio")
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val currentProWhatsAppClicks: StateFlow<Int> = currentProProfile
-        .flatMapLatest { pro ->
-            if (pro == null) flowOf(0)
-            else repository.getWhatsAppClicksCount(pro.id)
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
-
-    val currentProPhoneClicks: StateFlow<Int> = currentProProfile
-        .flatMapLatest { pro ->
-            if (pro == null) flowOf(0)
-            else repository.getPhoneClicksCount(pro.id)
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
-
-    val currentProSubscription: StateFlow<SubscriptionEntity?> = currentProProfile
-        .flatMapLatest { pro ->
-            if (pro == null) flowOf(null)
-            else repository.getSubscriptionForProfile(pro.id)
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
     fun addServiceForCurrentPro(title: String, description: String, price: Double, pricingType: String) {
+        val pro = currentProProfile.value ?: return
         viewModelScope.launch {
-            val pro = currentProProfile.value ?: return@launch
-            val srv = ServiceEntity(
-                id = "srv_" + UUID.randomUUID().toString().take(8),
-                professionalId = pro.id,
-                categoryId = pro.primaryCategoryId,
-                title = title,
-                description = description,
-                indicativePrice = price,
-                pricingType = pricingType
-            )
-            repository.addService(srv)
+            val res = repository.addService(pro.id, pro.primaryCategoryId, title, description, price, pricingType)
+            if (res.isFailure) _uiMessages.tryEmit("Impossible d'ajouter ce service.")
         }
     }
 
     fun deleteService(serviceId: String) {
+        val pro = currentProProfile.value ?: return
         viewModelScope.launch {
-            repository.deleteService(serviceId)
+            val res = repository.deleteService(pro.id, serviceId)
+            if (res.isFailure) _uiMessages.tryEmit("Impossible de supprimer ce service.")
         }
     }
 
-    fun addPortfolioImageForCurrentPro(caption: String) {
+    fun addPortfolioImageForCurrentPro(imageDataUrl: String, caption: String) {
+        val pro = currentProProfile.value ?: return
         viewModelScope.launch {
-            val pro = currentProProfile.value ?: return@launch
-            val img = PortfolioImageEntity(
-                id = "img_" + UUID.randomUUID().toString().take(8),
-                professionalId = pro.id,
-                imageUrl = "res://sample_work",
-                caption = caption
-            )
-            repository.addPortfolioImage(img)
+            val res = repository.addPortfolioPhoto(pro.id, imageDataUrl, caption)
+            if (res.isSuccess) {
+                _uiMessages.tryEmit("Photo ajoutée à votre galerie.")
+            } else {
+                _uiMessages.tryEmit("Impossible d'ajouter la photo.")
+            }
         }
     }
 
     fun deletePortfolioImage(imageId: String) {
+        val pro = currentProProfile.value ?: return
         viewModelScope.launch {
-            repository.deletePortfolioImage(imageId)
+            val res = repository.deletePortfolioPhoto(pro.id, imageId)
+            if (res.isFailure) _uiMessages.tryEmit("Impossible de supprimer la photo.")
         }
     }
 
-    // --- Admin Dashboard State & Actions ---
-    val pendingProfiles: StateFlow<List<ProfessionalProfileEntity>> = repository.pendingProfilesFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    // --- Admin Dashboard State & Actions (gated by isAdmin) ---
+    val pendingProfiles: StateFlow<List<ProfessionalProfile>> = isAdmin
+        .flatMapLatest { admin ->
+            if (!admin) flowOf(emptyList())
+            else repository.observePendingProfilesForAdmin().safeFallback(emptyList(), "pendingProfiles")
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    val allProfilesForAdmin: StateFlow<List<ProfessionalProfileEntity>> = repository.allProfilesFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val allProfilesForAdmin: StateFlow<List<ProfessionalProfile>> = isAdmin
+        .flatMapLatest { admin ->
+            if (!admin) flowOf(emptyList())
+            else repository.observeAllProfilesForAdmin().safeFallback(emptyList(), "allProfiles")
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    val allReports: StateFlow<List<ReportEntity>> = repository.allReportsFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val allReports: StateFlow<List<ReportRecord>> = isAdmin
+        .flatMapLatest { admin ->
+            if (!admin) flowOf(emptyList())
+            else repository.observeAllReportsForAdmin().safeFallback(emptyList(), "allReports")
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    val auditLogs: StateFlow<List<AdminAuditLogEntity>> = repository.auditLogsFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val auditLogs: StateFlow<List<AdminAuditLogRecord>> = isAdmin
+        .flatMapLatest { admin ->
+            if (!admin) flowOf(emptyList())
+            else repository.observeAuditLogsForAdmin().safeFallback(emptyList(), "auditLogs")
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
     fun approveProfile(profileId: String) {
+        if (!isAdmin.value) return
         viewModelScope.launch {
-            val admin = currentUser.value?.id ?: "admin"
-            repository.approveProfile(profileId, admin)
+            val res = repository.approveProfile(profileId)
+            _uiMessages.tryEmit(if (res.isSuccess) "Profil validé et publié." else "Erreur : action refusée.")
         }
     }
 
     fun rejectProfile(profileId: String, reason: String) {
+        if (!isAdmin.value) return
         viewModelScope.launch {
-            val admin = currentUser.value?.id ?: "admin"
-            repository.rejectProfile(profileId, reason, admin)
+            val res = repository.rejectProfile(profileId, reason)
+            _uiMessages.tryEmit(if (res.isSuccess) "Profil refusé." else "Erreur : action refusée.")
         }
     }
 
     fun suspendProfile(profileId: String, reason: String) {
+        if (!isAdmin.value) return
         viewModelScope.launch {
-            val admin = currentUser.value?.id ?: "admin"
-            repository.suspendProfile(profileId, reason, admin)
+            val res = repository.suspendProfile(profileId, reason)
+            _uiMessages.tryEmit(if (res.isSuccess) "Profil suspendu." else "Erreur : action refusée.")
         }
     }
 
-    fun toggleCategoryActive(categoryId: String, currentActive: Boolean) {
+    fun toggleCategoryActive(category: CategoryItem) {
+        if (!isAdmin.value) return
         viewModelScope.launch {
-            val admin = currentUser.value?.id ?: "admin"
-            repository.toggleCategory(categoryId, !currentActive, admin)
+            val res = repository.toggleCategory(category, !category.isActive)
+            if (res.isFailure) _uiMessages.tryEmit("Action refusée sur la catégorie.")
         }
     }
 
     fun addNewCategory(name: String, description: String, iconKey: String) {
+        if (!isAdmin.value) return
         viewModelScope.launch {
-            val admin = currentUser.value?.id ?: "admin"
-            val newCat = CategoryEntity(
-                id = "cat_" + UUID.randomUUID().toString().take(8),
-                name = name.trim(),
-                slug = name.trim().lowercase().replace(" ", "-"),
-                description = description.trim(),
-                iconKey = iconKey,
-                isActive = true,
-                sortOrder = (allCategories.value.maxOfOrNull { it.sortOrder } ?: 0) + 1
-            )
-            repository.addCategory(newCat, admin)
+            val nextOrder = (allCategories.value.maxOfOrNull { it.sortOrder } ?: 0) + 1
+            val res = repository.addCategory(name, description, iconKey, nextOrder)
+            _uiMessages.tryEmit(if (res.isSuccess) "Catégorie créée." else "Action refusée.")
         }
     }
 
     fun resolveReport(reportId: String, actionTaken: String) {
+        if (!isAdmin.value) return
         viewModelScope.launch {
-            val admin = currentUser.value?.id ?: "admin"
-            repository.updateReportStatus(reportId, actionTaken, admin)
+            val res = repository.updateReportStatus(reportId, actionTaken)
+            _uiMessages.tryEmit(if (res.isSuccess) "Signalement mis à jour." else "Erreur : action refusée.")
         }
+    }
+
+    private fun <T> Flow<T>.safeFallback(default: T, label: String): Flow<T> = catch { error ->
+        val fsError = generateSequence(error) { it.cause }
+            .filterIsInstance<FirebaseFirestoreException>()
+            .firstOrNull()
+        if (fsError == null && error is CancellationException) throw error
+        Log.w(TAG, "Stream $label error: ${(fsError ?: error).localizedMessage}")
+        emit(default)
+    }
+
+    private companion object {
+        const val TAG = "ProxiAfrikVM"
     }
 }
 
 class ProxiAfrikViewModelFactory(
-    private val application: Application,
-    private val repository: ProxiAfrikRepository
+    private val repository: FirestoreProxiRepository,
+    private val currentUserId: String
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(ProxiAfrikViewModel::class.java)) {
-            return ProxiAfrikViewModel(application, repository) as T
+            return ProxiAfrikViewModel(repository, currentUserId) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

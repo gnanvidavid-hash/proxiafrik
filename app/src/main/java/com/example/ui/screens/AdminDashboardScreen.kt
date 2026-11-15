@@ -2,8 +2,6 @@ package com.example.ui.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,26 +16,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AdminPanelSettings
-import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Flag
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.HourglassTop
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Verified
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -61,12 +51,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.local.ProfessionalProfileEntity
-import com.example.data.local.ReportEntity
+import com.example.data.model.ProfessionalProfile
 import com.example.ui.components.CategoryIconHelper
-import com.example.ui.theme.ProxiAmber
+import com.example.ui.theme.ProxiAmberBadge
 import com.example.ui.theme.ProxiBackground
-import com.example.ui.theme.ProxiBorder
 import com.example.ui.theme.ProxiDarkBlue
 import com.example.ui.theme.ProxiGreen
 import com.example.ui.theme.ProxiRed
@@ -82,19 +70,36 @@ fun AdminDashboardScreen(
     viewModel: ProxiAfrikViewModel
 ) {
     val context = LocalContext.current
+    val isAdmin by viewModel.isAdmin.collectAsState()
     val pendingProfiles by viewModel.pendingProfiles.collectAsState()
     val allProfiles by viewModel.allProfilesForAdmin.collectAsState()
     val allCategories by viewModel.allCategories.collectAsState()
     val allReports by viewModel.allReports.collectAsState()
     val auditLogs by viewModel.auditLogs.collectAsState()
 
-    var selectedTab by remember { mutableIntStateOf(0) }
+    if (!isAdmin) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(ProxiBackground)
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Default.Lock, contentDescription = null, tint = ProxiRed, modifier = Modifier.size(40.dp))
+                Spacer(modifier = Modifier.height(10.dp))
+                Text("Accès réservé aux administrateurs", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = ProxiTextPrimary)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Votre compte ne dispose pas des droits d'administration.", fontSize = 14.sp, color = ProxiTextSecondary)
+            }
+        }
+        return
+    }
 
-    // Rejection Dialog state
-    var profileToReject by remember { mutableStateOf<ProfessionalProfileEntity?>(null) }
+    var selectedTab by remember { mutableIntStateOf(0) }
+    var profileToReject by remember { mutableStateOf<ProfessionalProfile?>(null) }
     var rejectionReasonText by remember { mutableStateOf("") }
 
-    // Add category dialog state
     var showAddCategoryDialog by remember { mutableStateOf(false) }
     var newCatName by remember { mutableStateOf("") }
     var newCatDesc by remember { mutableStateOf("") }
@@ -111,7 +116,6 @@ fun AdminDashboardScreen(
             .testTag("admin_dashboard_screen"),
         contentPadding = PaddingValues(16.dp)
     ) {
-        // --- 1. ADMIN HEADER & KPIS ---
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -124,20 +128,19 @@ fun AdminDashboardScreen(
                         .padding(16.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.AdminPanelSettings, contentDescription = null, tint = ProxiAmber, modifier = Modifier.size(26.dp))
+                        Icon(Icons.Default.AdminPanelSettings, contentDescription = null, tint = ProxiAmberBadge, modifier = Modifier.size(26.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Panneau d'Administration ProxiAfrik", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text("Administration ProxiAfrik", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     }
-                    Text("Supervision des inscriptions, modération et annuaire", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
+                    Text("Validation des profils, catégories et modération", color = Color.White.copy(alpha = 0.9f), fontSize = 13.sp)
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // KPIs row 1
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        KpiBox(label = "Approuvés", value = "$approvedCount", color = ProxiGreen, modifier = Modifier.weight(1f))
-                        KpiBox(label = "En attente", value = "$pendingCount", color = ProxiAmber, modifier = Modifier.weight(1f))
-                        KpiBox(label = "Suspendus", value = "$suspendedCount", color = ProxiRed, modifier = Modifier.weight(1f))
-                        KpiBox(label = "Signalements", value = "$unresolvedReportsCount", color = Color(0xFFF97316), modifier = Modifier.weight(1f))
+                        KpiBox(label = "Approuvés", value = "$approvedCount", color = Color(0xFF4ADE80), modifier = Modifier.weight(1f))
+                        KpiBox(label = "En attente", value = "$pendingCount", color = ProxiAmberBadge, modifier = Modifier.weight(1f))
+                        KpiBox(label = "Suspendus", value = "$suspendedCount", color = Color(0xFFFCA5A5), modifier = Modifier.weight(1f))
+                        KpiBox(label = "Signalements", value = "$unresolvedReportsCount", color = Color(0xFFFDBA74), modifier = Modifier.weight(1f))
                     }
                 }
             }
@@ -145,7 +148,6 @@ fun AdminDashboardScreen(
 
         item { Spacer(modifier = Modifier.height(16.dp)) }
 
-        // --- 2. TABS ---
         item {
             TabRow(
                 selectedTabIndex = selectedTab,
@@ -155,32 +157,30 @@ fun AdminDashboardScreen(
                 Tab(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
-                    text = { Text("Validations ($pendingCount)", fontSize = 12.sp) }
+                    text = { Text("Validations ($pendingCount)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
                 )
                 Tab(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
-                    text = { Text("Catégories", fontSize = 12.sp) }
+                    text = { Text("Catégories", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
                 )
                 Tab(
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
-                    text = { Text("Signalements ($unresolvedReportsCount)", fontSize = 12.sp) }
+                    text = { Text("Signalements ($unresolvedReportsCount)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
                 )
                 Tab(
                     selected = selectedTab == 3,
                     onClick = { selectedTab = 3 },
-                    text = { Text("Audit", fontSize = 12.sp) }
+                    text = { Text("Audit", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
                 )
             }
         }
 
         item { Spacer(modifier = Modifier.height(12.dp)) }
 
-        // --- 3. TAB CONTENT ---
         when (selectedTab) {
             0 -> {
-                // VALIDATIONS TAB
                 if (pendingProfiles.isEmpty()) {
                     item {
                         Card(
@@ -194,7 +194,7 @@ fun AdminDashboardScreen(
                             ) {
                                 Icon(Icons.Default.Check, contentDescription = null, tint = ProxiGreen, modifier = Modifier.size(36.dp))
                                 Spacer(modifier = Modifier.height(8.dp))
-                                Text("Aucun profil en attente de validation.", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                Text("Aucun profil en attente de validation.", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = ProxiTextPrimary)
                                 Text("Tous les profils soumis ont été examinés.", color = ProxiTextSecondary, fontSize = 13.sp)
                             }
                         }
@@ -220,52 +220,48 @@ fun AdminDashboardScreen(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(4.dp))
                                             .background(Color(0xFFFEF3C7))
-                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            .padding(horizontal = 8.dp, vertical = 3.dp)
                                     ) {
-                                        Text("En attente", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFB45309))
+                                        Text("En attente", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF92400E))
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.height(4.dp))
+                                Spacer(modifier = Modifier.height(6.dp))
                                 Text("${pro.city} (${pro.neighborhood}), ${pro.countryName}", fontSize = 13.sp, color = ProxiTextSecondary)
-                                Text("Tel : ${pro.phonePublic} | WhatsApp : ${pro.whatsappNumber}", fontSize = 12.sp, color = ProxiTextPrimary)
+                                Text("Tél : ${pro.phonePublic} | WhatsApp : ${pro.whatsappNumber}", fontSize = 13.sp, color = ProxiTextPrimary)
 
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(pro.description, fontSize = 13.sp, color = ProxiTextPrimary, maxLines = 3)
 
                                 Spacer(modifier = Modifier.height(14.dp))
 
-                                // Action Buttons
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Button(
-                                        onClick = {
-                                            viewModel.approveProfile(pro.id)
-                                            Toast.makeText(context, "${pro.businessName} approuvé avec succès !", Toast.LENGTH_SHORT).show()
-                                        },
-                                        colors = ButtonDefaults.buttonColors(containerColor = ProxiGreen),
-                                        modifier = Modifier.weight(1f).testTag("admin_approve_btn_${pro.id}"),
+                                        onClick = { viewModel.approveProfile(pro.id) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = ProxiGreen, contentColor = Color.White),
+                                        modifier = Modifier.weight(1f).height(48.dp).testTag("admin_approve_btn_${pro.id}"),
                                         shape = RoundedCornerShape(8.dp)
                                     ) {
-                                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Approuver")
+                                        Text("Approuver", color = Color.White, fontWeight = FontWeight.Bold)
                                     }
 
                                     OutlinedButton(
                                         onClick = {
                                             profileToReject = pro
-                                            rejectionReasonText = "Pièces non conformes ou numéro non joignable"
+                                            rejectionReasonText = "Informations incomplètes ou numéro non joignable"
                                         },
                                         colors = ButtonDefaults.outlinedButtonColors(contentColor = ProxiRed),
-                                        modifier = Modifier.weight(1f).testTag("admin_reject_btn_${pro.id}"),
+                                        modifier = Modifier.weight(1f).height(48.dp).testTag("admin_reject_btn_${pro.id}"),
                                         shape = RoundedCornerShape(8.dp)
                                     ) {
-                                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp), tint = ProxiRed)
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Refuser")
+                                        Text("Refuser", color = ProxiRed, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -275,18 +271,17 @@ fun AdminDashboardScreen(
             }
 
             1 -> {
-                // CATEGORIES TAB
                 item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Gestion des Catégories (${allCategories.size})", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text("Gestion des Catégories (${allCategories.size})", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = ProxiTextPrimary)
                         TextButton(onClick = { showAddCategoryDialog = true }) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Add, contentDescription = null, tint = ProxiGreen, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Ajouter catégorie", color = ProxiGreen, fontWeight = FontWeight.Bold)
+                            Text("Ajouter", color = ProxiGreen, fontWeight = FontWeight.Bold)
                         }
                     }
                     Spacer(modifier = Modifier.height(8.dp))
@@ -307,26 +302,25 @@ fun AdminDashboardScreen(
                                 Icon(
                                     CategoryIconHelper.getIcon(cat.iconKey),
                                     contentDescription = null,
-                                    tint = if (cat.isActive) ProxiDarkBlue else Color.Gray,
+                                    tint = if (cat.isActive) ProxiDarkBlue else ProxiTextSecondary,
                                     modifier = Modifier.size(24.dp)
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column {
-                                    Text(cat.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                    Text(cat.description, fontSize = 11.sp, color = ProxiTextSecondary, maxLines = 1)
+                                    Text(cat.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = ProxiTextPrimary)
+                                    Text(cat.description, fontSize = 12.sp, color = ProxiTextSecondary, maxLines = 1)
                                 }
                             }
 
                             Button(
-                                onClick = {
-                                    viewModel.toggleCategoryActive(cat.id, cat.isActive)
-                                },
+                                onClick = { viewModel.toggleCategoryActive(cat) },
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (cat.isActive) ProxiGreen else Color(0xFF64748B)
+                                    containerColor = if (cat.isActive) ProxiGreen else Color(0xFF475569),
+                                    contentColor = Color.White
                                 ),
                                 shape = RoundedCornerShape(6.dp)
                             ) {
-                                Text(if (cat.isActive) "Active" else "Désactivée", fontSize = 11.sp)
+                                Text(if (cat.isActive) "Active" else "Désactivée", fontSize = 12.sp, color = Color.White)
                             }
                         }
                     }
@@ -334,7 +328,6 @@ fun AdminDashboardScreen(
             }
 
             2 -> {
-                // SIGNALEMENTS TAB
                 if (allReports.isEmpty()) {
                     item {
                         Card(
@@ -346,7 +339,7 @@ fun AdminDashboardScreen(
                                 modifier = Modifier.fillMaxWidth().padding(24.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Text("Aucun signalement d'utilisateur.", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                Text("Aucun signalement d'utilisateur.", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = ProxiTextPrimary)
                             }
                         }
                     }
@@ -363,34 +356,30 @@ fun AdminDashboardScreen(
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Text("Motif : ${report.reason}", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = ProxiRed)
-                                    Text(report.status, fontSize = 11.sp, color = if (report.status == "PENDING") ProxiAmber else ProxiGreen)
+                                    Text(report.status, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ProxiTextSecondary)
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
-                                Text("Détails : ${report.description}", fontSize = 13.sp, color = ProxiTextPrimary)
-                                Text("Signalé par : ${report.reporterName}", fontSize = 11.sp, color = ProxiTextSecondary)
+                                Text("Détails : ${report.description.ifBlank { "Aucun détail" }}", fontSize = 13.sp, color = ProxiTextPrimary)
+                                Text("Signalé par : ${report.reporterName}", fontSize = 12.sp, color = ProxiTextSecondary)
 
                                 if (report.status == "PENDING") {
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Spacer(modifier = Modifier.height(10.dp))
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Button(
-                                            onClick = {
-                                                viewModel.resolveReport(report.id, "RESOLVED")
-                                                Toast.makeText(context, "Signalement résolu", Toast.LENGTH_SHORT).show()
-                                            },
-                                            colors = ButtonDefaults.buttonColors(containerColor = ProxiGreen)
+                                            onClick = { viewModel.resolveReport(report.id, "RESOLVED") },
+                                            colors = ButtonDefaults.buttonColors(containerColor = ProxiGreen, contentColor = Color.White)
                                         ) {
-                                            Text("Classer comme résolu", fontSize = 12.sp)
+                                            Text("Classer résolu", fontSize = 12.sp, color = Color.White)
                                         }
 
                                         Button(
                                             onClick = {
                                                 viewModel.suspendProfile(report.reportedProfileId, "Suite à signalement fondé")
                                                 viewModel.resolveReport(report.id, "SUSPENDED")
-                                                Toast.makeText(context, "Profil suspendu", Toast.LENGTH_SHORT).show()
                                             },
-                                            colors = ButtonDefaults.buttonColors(containerColor = ProxiRed)
+                                            colors = ButtonDefaults.buttonColors(containerColor = ProxiRed, contentColor = Color.White)
                                         ) {
-                                            Text("Suspendre profil", fontSize = 12.sp)
+                                            Text("Suspendre profil", fontSize = 12.sp, color = Color.White)
                                         }
                                     }
                                 }
@@ -401,15 +390,14 @@ fun AdminDashboardScreen(
             }
 
             3 -> {
-                // AUDIT LOGS TAB
                 item {
-                    Text("Journal d'Audit des Actions Administratives", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("Journal d'Audit des Actions Administratives", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = ProxiTextPrimary)
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
                 items(auditLogs, key = { it.id }) { log ->
                     val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
-                    val dateStr = dateFormat.format(Date(log.createdAt))
+                    val dateStr = dateFormat.format(log.createdAt?.toDate() ?: Date())
 
                     Card(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
@@ -422,10 +410,10 @@ fun AdminDashboardScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(log.action, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = ProxiDarkBlue)
-                                Text(dateStr, fontSize = 11.sp, color = ProxiTextSecondary)
+                                Text(dateStr, fontSize = 12.sp, color = ProxiTextSecondary)
                             }
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(log.details, fontSize = 12.sp, color = ProxiTextPrimary)
+                            Text(log.details, fontSize = 13.sp, color = ProxiTextPrimary)
                         }
                     }
                 }
@@ -433,7 +421,6 @@ fun AdminDashboardScreen(
         }
     }
 
-    // Rejection Dialog with Mandatory Reason
     if (profileToReject != null) {
         val pro = profileToReject!!
         AlertDialog(
@@ -441,7 +428,7 @@ fun AdminDashboardScreen(
             title = { Text("Refuser la validation") },
             text = {
                 Column {
-                    Text("Veuillez indiquer le motif du refus pour ${pro.businessName} :")
+                    Text("Indiquez le motif du refus pour ${pro.businessName} :")
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = rejectionReasonText,
@@ -457,27 +444,25 @@ fun AdminDashboardScreen(
                         if (rejectionReasonText.isNotBlank()) {
                             viewModel.rejectProfile(pro.id, rejectionReasonText.trim())
                             profileToReject = null
-                            Toast.makeText(context, "Profil refusé.", Toast.LENGTH_SHORT).show()
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ProxiRed)
+                    colors = ButtonDefaults.buttonColors(containerColor = ProxiRed, contentColor = Color.White)
                 ) {
-                    Text("Confirmer le refus")
+                    Text("Confirmer le refus", color = Color.White)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { profileToReject = null }) {
-                    Text("Annuler")
+                    Text("Annuler", color = ProxiTextSecondary)
                 }
             }
         )
     }
 
-    // Add Category Dialog
     if (showAddCategoryDialog) {
         AlertDialog(
             onDismissRequest = { showAddCategoryDialog = false },
-            title = { Text("Créer une nouvelle catégorie") },
+            title = { Text("Créer une catégorie") },
             text = {
                 Column {
                     OutlinedTextField(
@@ -498,22 +483,23 @@ fun AdminDashboardScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        if (newCatName.isNotBlank()) {
+                        if (newCatName.trim().length >= 2) {
                             viewModel.addNewCategory(newCatName, newCatDesc, "work")
                             showAddCategoryDialog = false
                             newCatName = ""
                             newCatDesc = ""
-                            Toast.makeText(context, "Catégorie ajoutée avec succès", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "Nom trop court.", Toast.LENGTH_SHORT).show()
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ProxiGreen)
+                    colors = ButtonDefaults.buttonColors(containerColor = ProxiGreen, contentColor = Color.White)
                 ) {
-                    Text("Créer")
+                    Text("Créer", color = Color.White)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showAddCategoryDialog = false }) {
-                    Text("Annuler")
+                    Text("Annuler", color = ProxiTextSecondary)
                 }
             }
         )
@@ -530,13 +516,13 @@ private fun KpiBox(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
-            .background(Color.White.copy(alpha = 0.12f))
+            .background(Color.White.copy(alpha = 0.14f))
             .padding(vertical = 8.dp, horizontal = 4.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(value, color = color, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            Text(label, color = Color.White.copy(alpha = 0.85f), fontSize = 10.sp)
+            Text(label, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Medium)
         }
     }
 }
