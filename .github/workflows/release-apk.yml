@@ -31,27 +31,106 @@ jobs:
         env:
           GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
         run: |
-          if [ -n "$GOOGLE_SERVICES_JSON_BASE64" ]; then
-            printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | tr -d '[:space:]' | base64 -d > app/google-services.json
-            echo "Decoded app/google-services.json from GOOGLE_SERVICES_JSON_BASE64 secret."
-          fi
-          if [ ! -f app/google-services.json ]; then
-            echo "::error::Fichier app/google-services.json introuvable dans le dépôt GitHub. Poussez app/google-services.json ou ajoutez le secret GOOGLE_SERVICES_JSON_BASE64 dans Settings -> Secrets and variables -> Actions."
-            {
-              echo "### Erreur de configuration Firebase"
-              echo "Le fichier \`app/google-services.json\` est absent du dépôt GitHub. Sans ce fichier, Firebase Auth et Firestore ne peuvent pas fonctionner."
-              echo ""
-              echo "**Solutions :**"
-              echo "1. Ajoutez \`app/google-services.json\` dans votre dépôt GitHub, **ou**"
-              echo "2. Créez le secret GitHub \`GOOGLE_SERVICES_JSON_BASE64\` avec le contenu encodé en Base64 de \`app/google-services.json\`."
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
-          if ! grep -q "com.aistudio.proxiafrik.vzkpmn" app/google-services.json || ! grep -q '"client_type": 3' app/google-services.json; then
-            echo "::error::app/google-services.json ne contient pas le client Android com.aistudio.proxiafrik.vzkpmn ou le client OAuth Web (client_type: 3)."
-            exit 1
-          fi
-          echo "Firebase app/google-services.json verified."
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import sys
+
+          TARGET = "app/google-services.json"
+          PKG = "com.aistudio.proxiafrik.vzkpmn"
+
+          def is_valid_google_services(raw_text: str) -> tuple[bool, str]:
+              try:
+                  data = json.loads(raw_text)
+              except Exception as exc:
+                  return False, f"JSON invalide: {exc}"
+              clients = data.get("client")
+              if not isinstance(clients, list):
+                  return False, "Champ 'client' manquant dans google-services.json"
+              for client in clients:
+                  pkg = (
+                      client.get("client_info", {})
+                      .get("android_client_info", {})
+                      .get("package_name")
+                  )
+                  if pkg == PKG:
+                      oauth_clients = client.get("oauth_client", [])
+                      has_web_client = any(
+                          isinstance(c, dict) and c.get("client_type") == 3
+                          for c in oauth_clients
+                      )
+                      if not has_web_client:
+                          return False, f"Client OAuth Web (client_type: 3) absent pour {PKG}"
+                      return True, "OK"
+              return False, f"Application {PKG} absente de google-services.json"
+
+          def decode_secret(secret_value: str) -> tuple[str | None, str]:
+              trimmed = secret_value.strip()
+              if (trimmed.startswith('"') and trimmed.endswith('"')) or (
+                  trimmed.startswith("'") and trimmed.endswith("'")
+              ):
+                  trimmed = trimmed[1:-1].strip()
+              if trimmed.startswith("{"):
+                  return trimmed, "raw JSON"
+              if "base64," in trimmed[:64]:
+                  trimmed = trimmed.split("base64,", 1)[1]
+              compact = "".join(trimmed.split()).replace("-", "+").replace("_", "/")
+              if not compact:
+                  return None, "secret vide"
+              padding = (-len(compact)) % 4
+              compact_padded = compact + ("=" * padding)
+              try:
+                  decoded = base64.b64decode(compact_padded, validate=True).decode("utf-8")
+                  return decoded, "Base64"
+              except Exception as exc:
+                  return None, f"Base64 invalide ({exc})"
+
+          repo_valid = False
+          if os.path.isfile(TARGET):
+              with open(TARGET, "r", encoding="utf-8") as f:
+                  repo_valid, repo_msg = is_valid_google_services(f.read())
+          else:
+              repo_msg = "fichier absent du dépôt"
+
+          secret_val = os.environ.get("GOOGLE_SERVICES_JSON_BASE64", "")
+          if secret_val.strip():
+              decoded_text, mode = decode_secret(secret_val)
+              if decoded_text is not None:
+                  ok, msg = is_valid_google_services(decoded_text)
+                  if ok:
+                      os.makedirs(os.path.dirname(TARGET), exist_ok=True)
+                      with open(TARGET, "w", encoding="utf-8") as f:
+                          f.write(decoded_text)
+                      print(f"app/google-services.json configuré via GOOGLE_SERVICES_JSON_BASE64 ({mode}).")
+                      sys.exit(0)
+                  else:
+                      secret_err = msg
+              else:
+                  secret_err = mode
+
+              if repo_valid:
+                  print(f"::warning::GOOGLE_SERVICES_JSON_BASE64 ignoré ({secret_err}), utilisation du fichier app/google-services.json du dépôt.")
+                  sys.exit(0)
+
+              print(f"::error::Secret GOOGLE_SERVICES_JSON_BASE64 invalide ({secret_err}) et app/google-services.json absent du dépôt.")
+              summary = os.environ.get("GITHUB_STEP_SUMMARY")
+              if summary:
+                  with open(summary, "a", encoding="utf-8") as s:
+                      s.write("### Erreur de configuration Firebase\n")
+                      s.write(f"Le secret `GOOGLE_SERVICES_JSON_BASE64` est invalide ({secret_err}).\n\n")
+                      s.write("Vous pouvez soit :\n")
+                      s.write("1. Coller le contenu JSON complet de `app/google-services.json` (ou son Base64 exact sans coupure) dans `GOOGLE_SERVICES_JSON_BASE64`, **ou**\n")
+                      s.write("2. Pousser `app/google-services.json` directement dans le dépôt et supprimer le secret `GOOGLE_SERVICES_JSON_BASE64`.\n")
+              sys.exit(1)
+
+          if repo_valid:
+              print("Firebase app/google-services.json du dépôt vérifié.")
+              sys.exit(0)
+
+          print(f"::error::app/google-services.json invalide ou manquant ({repo_msg}).")
+          sys.exit(1)
+          PY
 
       - name: Determine release version tag
         run: |
@@ -123,7 +202,26 @@ jobs:
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
         run: |
           KEYSTORE_FILE="${{ runner.temp }}/proxiafrik-release.jks"
-          printf '%s' "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > "$KEYSTORE_FILE"
+          KEYSTORE_FILE="$KEYSTORE_FILE" python3 - <<'PY'
+          import base64
+          import os
+          import sys
+
+          raw = os.environ.get("KEYSTORE_BASE64", "").strip()
+          if (raw.startswith('"') and raw.endswith('"')) or (raw.startswith("'") and raw.endswith("'")):
+              raw = raw[1:-1].strip()
+          if "base64," in raw[:64]:
+              raw = raw.split("base64,", 1)[1]
+          compact = "".join(raw.split()).replace("-", "+").replace("_", "/")
+          padding = (-len(compact)) % 4
+          try:
+              data = base64.b64decode(compact + ("=" * padding), validate=True)
+          except Exception as exc:
+              print(f"::error::Secret KEYSTORE_BASE64 invalide ({exc}). Vérifiez la chaîne Base64 complète de votre fichier .jks.")
+              sys.exit(1)
+          with open(os.environ["KEYSTORE_FILE"], "wb") as f:
+              f.write(data)
+          PY
           chmod 600 "$KEYSTORE_FILE"
           if ! keytool -list -keystore "$KEYSTORE_FILE" -alias upload -storepass "$STORE_PASSWORD" > /dev/null 2>&1; then
             echo "::error::Failed to verify keystore or locate alias 'upload'. Ensure your keystore has alias 'upload' and STORE_PASSWORD is correct."
