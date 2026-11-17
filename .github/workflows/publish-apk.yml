@@ -146,6 +146,7 @@ jobs:
             if [ -f debug.keystore.base64 ]; then
               base64 -d debug.keystore.base64 > debug.keystore
             else
+              echo "::warning::debug.keystore.base64 absent du dépôt : génération d'un keystore temporaire (la connexion Google nécessitera son SHA-1 dans Firebase)."
               keytool -genkeypair -v \
                 -keystore debug.keystore \
                 -storepass android \
@@ -156,6 +157,17 @@ jobs:
                 -validity 10000 \
                 -dname "CN=Android Debug,O=Android,C=US"
             fi
+          fi
+          SHA1=$(keytool -list -v -keystore debug.keystore -alias androiddebugkey -storepass android 2>/dev/null | awk '/SHA1:|SHA-1:/ {print $NF; exit}')
+          SHA1_COMPACT=$(printf '%s' "$SHA1" | tr -d ':' | tr '[:upper:]' '[:lower:]')
+          echo "Debug keystore SHA-1: $SHA1"
+          if [ -n "$SHA1_COMPACT" ] && ! grep -qi "$SHA1_COMPACT" app/google-services.json; then
+            echo "::warning::Le SHA-1 de ce keystore debug ($SHA1) n'est pas dans app/google-services.json : Google Sign-In risque d'être refusé par Google Play Services."
+            {
+              echo "### Attention : empreinte SHA-1 Debug non enregistrée"
+              echo "L'APK Debug est signé avec le SHA-1 \`$SHA1\`, absent de \`app/google-services.json\`."
+              echo "Pour que la connexion Google fonctionne, poussez \`debug.keystore.base64\` (SHA-1 \`34:3B:7D:0E:84:BD:45:3A:D9:B1:40:B2:CA:30:AA:85:CB:6D:E5:95\`) ou ajoutez ce SHA-1 dans Firebase Console."
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Run unit and Robolectric tests

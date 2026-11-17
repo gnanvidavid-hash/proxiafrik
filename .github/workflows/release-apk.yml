@@ -275,12 +275,32 @@ jobs:
           fi
 
           echo "Validating APK signature with: $APKSIGNER"
-          "$APKSIGNER" verify --verbose --print-certs "$OUTPUT_APK"
+          CERT_OUT=$("$APKSIGNER" verify --verbose --print-certs "$OUTPUT_APK")
+          echo "$CERT_OUT"
 
           # Ensure production APK is not accidentally signed with Android Debug key
-          if "$APKSIGNER" verify --print-certs "$OUTPUT_APK" | grep -q "CN=Android Debug"; then
+          if printf '%s\n' "$CERT_OUT" | grep -q "CN=Android Debug"; then
             echo "::error::Release APK appears to be signed with a debug certificate! Aborting release."
             exit 1
+          fi
+
+          REL_SHA1_HEX=$(printf '%s\n' "$CERT_OUT" | awk -F'SHA-1 digest: ' '/SHA-1 digest:/ {print $2; exit}' | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+          REL_SHA256_HEX=$(printf '%s\n' "$CERT_OUT" | awk -F'SHA-256 digest: ' '/SHA-256 digest:/ {print $2; exit}' | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')
+          REL_SHA1_COLON=$(printf '%s' "$REL_SHA1_HEX" | tr '[:lower:]' '[:upper:]' | sed 's/\(..\)/\1:/g; s/:$//')
+          REL_SHA256_COLON=$(printf '%s' "$REL_SHA256_HEX" | sed 's/\(..\)/\1:/g; s/:$//')
+
+          {
+            echo "### Empreintes du certificat Release"
+            echo "- **SHA-1 :** \`$REL_SHA1_COLON\`"
+            echo "- **SHA-256 :** \`$REL_SHA256_COLON\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -n "$REL_SHA1_HEX" ] && ! grep -qi "$REL_SHA1_HEX" app/google-services.json; then
+            echo "::warning::Le SHA-1 de votre keystore Release ($REL_SHA1_COLON) n'est pas encore dans app/google-services.json. Ajoutez-le dans Firebase Console pour que Google Sign-In fonctionne sur l'APK Release."
+            {
+              echo ""
+              echo "> **Important pour Google Sign-In (APK Release) :** Ajoutez le SHA-1 ci-dessus dans **Firebase Console → Paramètres du projet → Vos applications (\`com.aistudio.proxiafrik.vzkpmn\`) → Ajouter une empreinte**, puis mettez à jour \`GOOGLE_SERVICES_JSON_BASE64\`."
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
           sha256sum "$OUTPUT_APK" > "${OUTPUT_APK}.sha256"

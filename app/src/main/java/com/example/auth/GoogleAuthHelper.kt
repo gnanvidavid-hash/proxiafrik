@@ -3,18 +3,24 @@ package com.example.auth
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import android.util.Log
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.GetCredentialProviderConfigurationException
+import androidx.credentials.exceptions.GetCredentialUnsupportedException
+import androidx.credentials.exceptions.NoCredentialException
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.Companion.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.auth
@@ -28,6 +34,12 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
 private const val TAG = "Auth"
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
 
 @SuppressLint("DiscouragedApi")
 private fun resolveDefaultWebClientId(context: Context): String? {
@@ -116,7 +128,7 @@ fun onGoogleSignInClicked(
 
     scope.launch {
         try {
-            val activityContext = (context as? Activity) ?: context
+            val activityContext = context.findActivity() ?: context
             val result = credentialManager.getCredential(activityContext, request)
             val credential = result.credential
             if (credential is CustomCredential && credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
@@ -130,9 +142,34 @@ fun onGoogleSignInClicked(
         } catch (e: GetCredentialCancellationException) {
             Log.w(TAG, "Google Sign-In flow cancelled or dismissed: ${e.message}", e)
             onAuthCancelled()
+        } catch (e: NoCredentialException) {
+            Log.e(TAG, "No Google credential available", e)
+            onAuthError(
+                "Aucun compte Google utilisable n'a été trouvé sur cet appareil, ou la signature SHA-1 de cet APK n'est pas autorisée dans Firebase. (${e.localizedMessage ?: e.javaClass.simpleName})"
+            )
+        } catch (e: GetCredentialProviderConfigurationException) {
+            Log.e(TAG, "Credential Manager provider configuration error", e)
+            onAuthError(
+                "Services Google Play indisponibles ou obsolètes sur cet appareil. (${e.localizedMessage ?: e.javaClass.simpleName})"
+            )
+        } catch (e: GetCredentialUnsupportedException) {
+            Log.e(TAG, "Credential Manager unsupported", e)
+            onAuthError(
+                "Connexion Google non prise en charge sur cet appareil. (${e.localizedMessage ?: e.javaClass.simpleName})"
+            )
+        } catch (e: GetCredentialException) {
+            Log.e(TAG, "Google Sign-In credential error", e)
+            onAuthError(
+                "Connexion Google impossible (${e.type}): ${e.localizedMessage ?: "vérifiez la connexion internet et l'empreinte SHA-1 Firebase."}"
+            )
+        } catch (e: FirebaseAuthException) {
+            Log.e(TAG, "Firebase Auth signInWithCredential failed: ${e.errorCode}", e)
+            onAuthError(
+                "Erreur d'authentification Firebase (${e.errorCode}) : ${e.localizedMessage ?: "connexion refusée."}"
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Google Sign-In failed", e)
-            onAuthError(e.localizedMessage ?: "Échec de la connexion Google.")
+            onAuthError(e.localizedMessage ?: "Échec de la connexion Google (${e.javaClass.simpleName}).")
         }
     }
 }
