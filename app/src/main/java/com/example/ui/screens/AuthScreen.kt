@@ -214,7 +214,9 @@ fun UnauthenticatedSignInScreen(
                             scope = coroutineScope,
                             onAuthCancelled = {
                                 isLoading = false
-                                errorMessage = "Connexion Google annulée ou bloquée par Google Play Services. Si aucune fenêtre de choix de compte ne s'est ouverte, vérifiez qu'un compte Google est actif sur le téléphone et que l'empreinte SHA-1 de cet APK est autorisée dans Firebase."
+                            },
+                            onAuthCancelledDiagnostic = { diagnostic ->
+                                errorMessage = diagnostic
                             }
                         )
                     },

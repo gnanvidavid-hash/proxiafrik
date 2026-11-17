@@ -4,8 +4,11 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Log
 import androidx.credentials.ClearCredentialStateRequest
+import java.security.MessageDigest
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
@@ -53,6 +56,33 @@ private fun resolveDefaultWebClientId(context: Context): String? {
         context.getString(resId).takeIf { it.isNotBlank() }
     } catch (_: Exception) {
         null
+    }
+}
+
+@Suppress("DEPRECATION")
+fun getAppSigningSha1(context: Context): String {
+    return try {
+        val pkgInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            context.packageManager.getPackageInfo(
+                context.packageName,
+                PackageManager.GET_SIGNING_CERTIFICATES
+            )
+        } else {
+            context.packageManager.getPackageInfo(
+                context.packageName,
+                PackageManager.GET_SIGNATURES
+            )
+        }
+        val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            pkgInfo.signingInfo?.apkContentsSigners
+        } else {
+            pkgInfo.signatures
+        }
+        val certBytes = signatures?.firstOrNull()?.toByteArray() ?: return "inconnu"
+        val digest = MessageDigest.getInstance("SHA-1").digest(certBytes)
+        digest.joinToString(":") { "%02X".format(it) }
+    } catch (_: Exception) {
+        "inconnu"
     }
 }
 
@@ -114,7 +144,8 @@ fun onGoogleSignInClicked(
     onAuthSuccess: () -> Unit,
     onAuthError: (String) -> Unit,
     scope: CoroutineScope,
-    onAuthCancelled: () -> Unit = {}
+    onAuthCancelled: () -> Unit = {},
+    onAuthCancelledDiagnostic: ((String) -> Unit)? = null
 ) {
     val clientId = resolveDefaultWebClientId(context) ?: run {
         onAuthError("Configuration Google Sign-In introuvable (default_web_client_id).")
@@ -141,11 +172,17 @@ fun onGoogleSignInClicked(
             }
         } catch (e: GetCredentialCancellationException) {
             Log.w(TAG, "Google Sign-In flow cancelled or dismissed: ${e.message}", e)
+            val sha1 = getAppSigningSha1(context)
+            val detail = e.message?.takeIf { it.isNotBlank() } ?: "annulé par Play Services"
             onAuthCancelled()
+            onAuthCancelledDiagnostic?.invoke(
+                "Connexion Google annulée ou refusée ($detail).\n\nSHA-1 de cet APK :\n$sha1"
+            )
         } catch (e: NoCredentialException) {
             Log.e(TAG, "No Google credential available", e)
+            val sha1 = getAppSigningSha1(context)
             onAuthError(
-                "Aucun compte Google utilisable n'a été trouvé sur cet appareil, ou la signature SHA-1 de cet APK n'est pas autorisée dans Firebase. (${e.localizedMessage ?: e.javaClass.simpleName})"
+                "Aucun compte Google utilisable ou SHA-1 non autorisé dans Firebase (${e.localizedMessage ?: e.javaClass.simpleName}).\n\nSHA-1 de cet APK :\n$sha1"
             )
         } catch (e: GetCredentialProviderConfigurationException) {
             Log.e(TAG, "Credential Manager provider configuration error", e)
@@ -159,8 +196,9 @@ fun onGoogleSignInClicked(
             )
         } catch (e: GetCredentialException) {
             Log.e(TAG, "Google Sign-In credential error", e)
+            val sha1 = getAppSigningSha1(context)
             onAuthError(
-                "Connexion Google impossible (${e.type}): ${e.localizedMessage ?: "vérifiez la connexion internet et l'empreinte SHA-1 Firebase."}"
+                "Connexion Google impossible (${e.type}): ${e.localizedMessage ?: "vérifiez internet et Firebase"}.\n\nSHA-1 de cet APK :\n$sha1"
             )
         } catch (e: FirebaseAuthException) {
             Log.e(TAG, "Firebase Auth signInWithCredential failed: ${e.errorCode}", e)
